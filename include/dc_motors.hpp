@@ -1,10 +1,15 @@
 #pragma once
+
+void IRAM_ATTR ISR_countA();
+void IRAM_ATTR ISR_countB();
+
 class DcMotor
 {
 private:
     bool motorLrunning = false, motorRrunning = false;
     long targetStepsL = 0, targetStepsR = 0;
-    bool moveFinishedL = false, moveFinishedR = false, dirL = true, dirR = true, busy = false;;
+    bool moveFinishedL = false, moveFinishedR = false, dirL = true, dirR = true, busy = false;
+    ;
 
 public:
     DcMotor();

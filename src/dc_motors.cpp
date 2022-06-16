@@ -41,10 +41,6 @@ DcMotor::DcMotor()
 
     // make sure the motors are stopped
     stop();
-
-    // attach Intterupts:
-    attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), ISR_countA, RISING);
-    attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), ISR_countB, RISING);
 }
 
 void DcMotor::brake()

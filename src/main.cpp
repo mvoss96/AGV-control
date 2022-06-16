@@ -21,11 +21,18 @@ void setup()
   // put your setup code here, to run once:
   Serial.begin(SERIAL_BAUDRATE);
   Serial.println("start");
-
+  // attach Intterupts:
+  attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), ISR_countA, RISING);
+  attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), ISR_countB, RISING);
   delay(2000);
   // setup backround task;
   xTaskCreatePinnedToCore(controlMotorTask, "dcMotorControlTask", 10000, &mot, 1, NULL, 1);
-  mot.driveTurn(11, true);
+  for (size_t i = 0; i < 4; i++)
+  {
+    mot.driveTurn(11, true);
+    delay(500);
+  }
+
   delay(500);
   mot.driveTurn(11, false);
   delay(500);
