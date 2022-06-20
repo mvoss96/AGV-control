@@ -1,6 +1,10 @@
 #include <Arduino.h>
 #include "defines.hpp"
 #include "dc_motors.hpp"
+#include "wifi.hpp"
+#include "april_tag.hpp"
+
+DcMotor mot;
 
 void controlMotorTask(void *argument)
 {
@@ -14,13 +18,21 @@ void controlMotorTask(void *argument)
   }
   vTaskDelete(NULL);
 }
-DcMotor mot;
 
 void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(SERIAL_BAUDRATE);
   Serial.println("start");
+
+  wifiSetup();
+
+
+  while (1)
+  {
+    //Serial.println(numDet);
+    delay(1000);
+  }
   // attach Intterupts:
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), ISR_countA, RISING);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), ISR_countB, RISING);
