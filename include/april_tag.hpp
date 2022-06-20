@@ -13,7 +13,7 @@ struct AprilTag
     void print();
 };
 
-inline int numDet = 0;
+inline int detectTagCenter = 0;
 
 
 bool testApril(AsyncUDPPacket packet);

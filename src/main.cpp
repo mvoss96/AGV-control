@@ -30,8 +30,8 @@ void setup()
 
   while (1)
   {
-    //Serial.println(numDet);
-    delay(1000);
+    Serial.println(detectTagCenter);
+    delay(500);
   }
   // attach Intterupts:
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), ISR_countA, RISING);

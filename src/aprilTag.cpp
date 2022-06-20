@@ -101,10 +101,10 @@ void parseApril(AsyncUDPPacket packet)
         // Serial.print(packet.data()[i], HEX);
         // Serial.print(":");
     }
-    Serial.println();
-
+    //Serial.println();
     int numTags = buffToInteger(packet.data() + 12);
-    // Serial.printf("num: %d\n", numTags);
+    detectTagCenter = 0;
+    double tagCenterTotal = 0;
     if (numTags > 0)
     {
         uint8_t *tagPTemp = packet.data() + 24;
@@ -134,9 +134,9 @@ void parseApril(AsyncUDPPacket packet)
                 aTag.H[i] = buffToFloat(tagPTemp);
                 tagPTemp += 4;
             }
-            aTag.print();
+            tagCenterTotal += aTag.c[0];
+            //]aTag.print();
         }
+        detectTagCenter = tagCenterTotal/numTags;
     }
-
-    numDet = numTags;
 }
