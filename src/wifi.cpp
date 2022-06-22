@@ -7,13 +7,27 @@
 
 AsyncUDP udp;
 
+void udpTimeoutTask(void *argument)
+{
+    Serial.print("udpTimeoutTask is running on: ");
+    Serial.println(xPortGetCoreID());
+
+    for (;;)
+    {
+        testTimeout();
+        vTaskDelay(10);
+    }
+    Serial.println("udpTimeoutTask closed");
+    vTaskDelete(NULL);
+}
+
+
 void udpOnPck(AsyncUDPPacket packet)
 {
     if (testApril(packet))
     {
         parseApril(packet);
     }
-
 }
 
 void wifiSetup()
@@ -31,4 +45,5 @@ void wifiSetup()
         Serial.print("Start listening for udp packets on port: ");
         Serial.println(UDP_PORT);
     }
+    xTaskCreatePinnedToCore(udpTimeoutTask, "udpTimeoutTask", 10000, NULL, 1, NULL, 1);
 }

@@ -1,8 +1,26 @@
+#if 0
 #include <Arduino.h>
-#include "dc_motors.hpp"
 #include "defines.hpp"
+#include "dc_motors.hpp"
+
 
 static volatile long stepsL = 0, stepsR = 0;
+
+DcMotor mot;
+
+void controlMotorTask(void *argument)
+{
+    Serial.print("dcMotorControlTask is running on: ");
+    Serial.println(xPortGetCoreID());
+
+    for (;;)
+    {
+        mot.control();
+        yield();
+    }
+    Serial.println("dcMotorControlTask closed");
+    vTaskDelete(NULL);
+}
 
 void IRAM_ATTR ISR_countA()
 {
@@ -182,7 +200,6 @@ long DcMotor::getStepsR()
 
 void DcMotor::control()
 {
-    int speed = 190;
     if (motorLrunning)
     {
         if (targetStepsL <= stepsL)
@@ -215,3 +232,4 @@ bool DcMotor::getBusy()
 {
     return busy;
 }
+#endif

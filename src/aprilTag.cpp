@@ -1,12 +1,27 @@
 #include <Arduino.h>
 #include "april_tag.hpp"
+#include "defines.hpp"
 
 namespace
 {
     const uint8_t magic1[4] = {0x41, 0x50, 0x52, 0x49};
     const uint8_t magic2[4] = {0x4c, 0x54, 0x41, 0x47};
     const uint8_t version[4] = {0x00, 0x01, 0x00, 0x02};
+    unsigned long timeoutTimer = 0;
 };
+
+unsigned int detectTagCenter = 0;
+int numTags = 0;
+bool connection = false;
+
+void testTimeout()
+{
+    if (connection && millis() - timeoutTimer > UDP_TIMEOUT)
+    {
+        Serial.println("UDP timeout");
+        connection = false;
+    }
+}
 
 /**
  * @brief print the content of an AprilTag packet to the serial monitor
@@ -95,14 +110,20 @@ bool testApril(AsyncUDPPacket packet)
  */
 void parseApril(AsyncUDPPacket packet)
 {
+    if (!connection)
+    {
+        Serial.println("udp connected");
+        connection = true;
+    }
+    timeoutTimer = millis();
     // Serial.println("April Packet: ");
     for (int i = 12; i < packet.length(); i++)
     {
         // Serial.print(packet.data()[i], HEX);
         // Serial.print(":");
     }
-    //Serial.println();
-    int numTags = buffToInteger(packet.data() + 12);
+    // Serial.println();
+    numTags = buffToInteger(packet.data() + 12);
     detectTagCenter = 0;
     double tagCenterTotal = 0;
     if (numTags > 0)
@@ -134,9 +155,9 @@ void parseApril(AsyncUDPPacket packet)
                 aTag.H[i] = buffToFloat(tagPTemp);
                 tagPTemp += 4;
             }
-            tagCenterTotal += aTag.c[0];
+            tagCenterTotal += aTag.c[1];
             //]aTag.print();
         }
-        detectTagCenter = tagCenterTotal/numTags;
+        detectTagCenter = tagCenterTotal / numTags;
     }
 }
