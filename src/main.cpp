@@ -12,18 +12,15 @@ void setup()
   Serial.println("start");
   stepperMotorsInit();
 
-  delay(3000);
-
   // start up networking
   wifiSetup();
 
   // setup backround tasks;
   xTaskCreatePinnedToCore(steppersControlTask, "steppersControlTask", 10000, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(controlCarTask, "controlCarTask", 10000, NULL, 1, NULL, 1);
-
 }
 
 void loop()
 {
-  yield();
+  vTaskDelay(0);
 }

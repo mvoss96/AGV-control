@@ -32,14 +32,13 @@
  * Configuration Settings
  */
 #define TAG_CENTER 600
+#define TAG_CENTER_DEADZONE_SMALL 50
 #define TAG_CENTER_DEADZONE 100
 #define WIFI_SSID "AGV1"
+#define TELNET_PORT 23
 #define UDP_PORT 7709
 #define UDP_TIMEOUT 1000
 #define SERIAL_BAUDRATE 115200
-#define ENC_WHEEL_DIA 66.1
-#define ENC_WHEEL_STEPS 20
-#define WHEEL_DIST 150
 
 #if 0
 /*!DC-motors */
@@ -53,7 +52,22 @@
 
 /*!Stepper Motor */
 #define STEPER_STEPS_PER_ROT 2048
+#define WHEEL_ROTS_360 2.75
 #define STEPPER_MAX_RPM 20
+
+enum missions
+{
+    NO_MISSION,
+    DELIVER,
+    GET_GUMMY,
+    GET_COTTON,
+    GET_BALL
+};
+
+/*!telnet setings */
+#define DEBUG_ON 1
+#define DEBUG_USE_SERIAL 1
+#define DEBUG_USE_TELNET 1
 
 /*!
  * helpers

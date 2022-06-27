@@ -3,23 +3,51 @@
 #include "car_control.hpp"
 #include "stepper_motor.hpp"
 #include "april_tag.hpp"
+#include "telnet_debug.hpp"
 
 extern unsigned int detectTagCenter;
-extern bool connection;
+extern bool udpConnection;
+extern bool telnetConnection;
+extern uint8_t missionMode;
 
 namespace
 {
+
     bool tagLock = false;
     unsigned long tagTimeoutTimer;
     int followMode = 0;
+    bool innerLock = false;
+}
+
+enum movement_state
+{
+    RIGHT,
+    LEFT,
+    STRAIGHT,
+    STRAIGHT_RIGHT,
+    STRAIGHT_LEFT
+};
+
+void askForMission()
+{
+    missionMode = missions::NO_MISSION;
+    DEBUG_MSG("ask for mission");
+    telnet.println("please choose a mission:");
+    telnet.println("d-> deliver");
+    telnet.println("gg -> get gummy bear");
+    telnet.println("gc -> get cotton wool");
+    telnet.println("gb -> get ping pong ball");
+    while (missionMode == missions::NO_MISSION)
+        vTaskDelay(0);
 }
 
 void searchForTag()
 {
-    Serial.println("start searching for Tag");
+    DEBUG_MSG("start searching for Tag");
     while (1)
     {
-        if (connection == false)
+        if (udpConnection == false || telnetConnection == false ||
+            missionMode == missions::NO_MISSION)
         {
             stepperStop();
             return;
@@ -27,15 +55,15 @@ void searchForTag()
         // wait for detectTag signal
         if (detectTagCenter != 0)
         {
-            Serial.println("tag in view");
+            DEBUG_MSG("tag in view");
             tagLock = true;
             return;
         }
         // make sure robot is turning
         if (stepperIsRunning() == false)
         {
-            Serial.println("start turning");
-            stepperStartTurnLeft();
+            DEBUG_MSG("start turning");
+            stepperStartTurnLeft(5);
         }
         vTaskDelay(0);
     }
@@ -43,40 +71,68 @@ void searchForTag()
 
 void followTag()
 {
-    if (detectTagCenter == 0 || connection == false)
+    if (detectTagCenter == 0 || udpConnection == false ||
+        telnetConnection == false || missionMode == missions::NO_MISSION)
     {
         return;
     }
-    Serial.print(detectTagCenter);
-    if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE)
+    DEBUG_SER_VAR(detectTagCenter);
+
+    if (innerLock)
     {
-        Serial.print(" turn right");
-        followMode = 1;
-        if (followMode != 1 || !stepperIsRunning())
+        if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE ||
+            detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE)
         {
-            stepperStartTurnRight();
+            DEBUG_MSG("innerLock lost");
+            innerLock = false;
         }
-    }
-    else if (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE)
-    {
-        followMode = 2;
-        Serial.print(" turn left");
-        if (followMode != 2 || !stepperIsRunning())
+        else if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
         {
-            stepperStartTurnLeft();
+            DEBUG_MSG("drive straight");
+            followMode = movement_state::STRAIGHT;
+            stepperStartStraight(20);
         }
     }
     else
     {
-        followMode = 3;
-        Serial.print(" drive straight");
-        if (followMode != 3 || !stepperIsRunning())
+        if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE_SMALL)
         {
-            stepperStartStraight();
+            if (followMode != movement_state::RIGHT || !stepperIsRunning())
+            {
+                DEBUG_MSG(" turn right");
+                followMode = movement_state::RIGHT;
+                stepperStartTurnRight(3);
+            }
+        }
+        else if (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE_SMALL)
+        {
+            if (followMode != movement_state::LEFT || !stepperIsRunning())
+            {
+                DEBUG_MSG(" turn left");
+                followMode = movement_state::LEFT;
+                stepperStartTurnLeft(3);
+            }
+        }
+        else
+        {
+            DEBUG_MSG("innerLock");
+            innerLock = true;
         }
     }
-    Serial.println();
-    // delay(500);
+}
+
+void waitForUDP()
+{
+    DEBUG_MSG("carControlTask is waiting for UDP stream");
+    while (udpConnection == false)
+        vTaskDelay(0);
+}
+
+void waitForTelnet()
+{
+    DEBUG_MSG("carControlTask is waiting for telnet");
+    while (telnetConnection == false)
+        vTaskDelay(0);
 }
 
 void controlCarTask(void *argument)
@@ -86,29 +142,37 @@ void controlCarTask(void *argument)
     // wait for connection
     for (;;)
     {
-        if (connection)
-        {
-            // no tag
-            if (tagLock == false)
-            {
-                searchForTag();
-            }
-            else if (detectTagCenter >= 0)
-            {
-                tagTimeoutTimer = millis();
-                followTag();
-            }
-            else if (millis() - tagTimeoutTimer > 1000)
-            {
-                Serial.println("timeout: tag lock lost");
-                tagLock = false;
-                stepperStop();
-            }
-        }
-        else
+        if (udpConnection == false)
         {
             tagLock = false;
             stepperStop();
+            waitForUDP();
+        }
+        else if (telnetConnection == false)
+        {
+            tagLock = false;
+            stepperStop();
+            waitForTelnet();
+        }
+        else if (missionMode == missions::NO_MISSION)
+        {
+            stepperStop();
+            askForMission();
+        }
+        else if (tagLock == false)
+        {
+            stepperStop();
+            searchForTag();
+        }
+        else if (detectTagCenter > 0)
+        {
+            tagTimeoutTimer = millis();
+            followTag();
+        }
+        else if (millis() - tagTimeoutTimer > 1000)
+        {
+            DEBUG_MSG("tagTimeout: tag lock lost");
+            tagLock = false;
         }
         vTaskDelay(0);
     }

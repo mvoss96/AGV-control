@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "april_tag.hpp"
 #include "defines.hpp"
+#include "telnet_debug.hpp"
 
 namespace
 {
@@ -12,14 +13,14 @@ namespace
 
 unsigned int detectTagCenter = 0;
 int numTags = 0;
-bool connection = false;
+bool udpConnection = false;
 
 void testTimeout()
 {
-    if (connection && millis() - timeoutTimer > UDP_TIMEOUT)
+    if (udpConnection && millis() - timeoutTimer > UDP_TIMEOUT)
     {
-        Serial.println("UDP timeout");
-        connection = false;
+        DEBUG_MSG("UDP timeout");
+        udpConnection = false;
     }
 }
 
@@ -110,10 +111,10 @@ bool testApril(AsyncUDPPacket packet)
  */
 void parseApril(AsyncUDPPacket packet)
 {
-    if (!connection)
+    if (!udpConnection)
     {
-        Serial.println("udp connected");
-        connection = true;
+        DEBUG_MSG("udp connected");
+        udpConnection = true;
     }
     timeoutTimer = millis();
     // Serial.println("April Packet: ");
