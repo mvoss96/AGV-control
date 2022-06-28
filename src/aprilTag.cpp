@@ -12,6 +12,7 @@ namespace
 };
 
 unsigned int detectTagCenter = 0;
+double detectTagSize = 0;
 int numTags = 0;
 bool udpConnection = false;
 
@@ -32,6 +33,27 @@ void AprilTag::print()
 {
     Serial.printf("AprilTag: id: %d hamming: %d ncodes: %d c: %f/%f\n",
                   id, hamming, ncodes, c[0], c[1]);
+}
+
+/**
+ * @brief get the aprroximate size of the april Tag by calcuating the longest vertical side
+ *
+ * @return the longest vertical side
+ */
+double AprilTag::size()
+{
+    double longest = 0;
+    double sides[4];
+    sides[0] = abs(p[0][0] - p[1][0]);
+    sides[1] = abs(p[1][0] - p[2][0]);
+    sides[2] = abs(p[2][0] - p[3][0]);
+    sides[3] = abs(p[3][0] - p[0][0]);
+    for (size_t i = 0; i < 4; i++)
+    {
+        if (sides[i] > longest)
+            longest = sides[i];
+    }
+    return longest;
 }
 
 /**
@@ -127,6 +149,7 @@ void parseApril(AsyncUDPPacket packet)
     numTags = buffToInteger(packet.data() + 12);
     detectTagCenter = 0;
     double tagCenterTotal = 0;
+    double tagSizetotal = 0;
     if (numTags > 0)
     {
         uint8_t *tagPTemp = packet.data() + 24;
@@ -157,8 +180,10 @@ void parseApril(AsyncUDPPacket packet)
                 tagPTemp += 4;
             }
             tagCenterTotal += aTag.c[1];
+            tagSizetotal += aTag.size();
             //]aTag.print();
         }
         detectTagCenter = tagCenterTotal / numTags;
+        detectTagSize = tagSizetotal / numTags;
     }
 }

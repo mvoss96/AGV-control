@@ -6,6 +6,7 @@
 #include "telnet_debug.hpp"
 
 extern unsigned int detectTagCenter;
+extern unsigned int detectTagSize;
 extern bool udpConnection;
 extern bool telnetConnection;
 extern uint8_t missionMode;
@@ -88,9 +89,18 @@ void followTag()
         }
         else if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
         {
-            DEBUG_MSG("drive straight");
-            followMode = movement_state::STRAIGHT;
-            stepperStartStraight(20);
+            if (detectTagSize < TAG_CLOSE_SIZE)
+            {
+                DEBUG_MSG("drive straight");
+                followMode = movement_state::STRAIGHT;
+                stepperStartStraight(STEPPER_MAX_RPM);
+            }
+            else
+            {
+                DEBUG_MSG("Beacon reached");
+                stepperStop();
+                vTaskDelay(100);
+            }
         }
     }
     else
@@ -101,7 +111,7 @@ void followTag()
             {
                 DEBUG_MSG(" turn right");
                 followMode = movement_state::RIGHT;
-                stepperStartTurnRight(3);
+                stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
             }
         }
         else if (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE_SMALL)
@@ -110,7 +120,7 @@ void followTag()
             {
                 DEBUG_MSG(" turn left");
                 followMode = movement_state::LEFT;
-                stepperStartTurnLeft(3);
+                stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
             }
         }
         else

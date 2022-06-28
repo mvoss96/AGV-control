@@ -6,8 +6,8 @@
 
 namespace
 {
-    BasicStepperDriver stepper(STEPER_STEPS_PER_ROT, STEPPER_L_DIR, STEPPER_L_STEP, STEPPER_L_SLEEP);
-    BasicStepperDriver stepper2(STEPER_STEPS_PER_ROT, STEPPER_R_DIR, STEPPER_R_STEP, STEPPER_R_SLEEP);
+    BasicStepperDriver stepper(STEPER_STEPS_PER_ROT, PIN_STEPPER_L_DIR, PIN_STEPPER_L_STEP, PIN_STEPPER_L_SLEEP);
+    BasicStepperDriver stepper2(STEPER_STEPS_PER_ROT, PIN_STEPPER_R_DIR, PIN_STEPPER_R_STEP, PIN_STEPPER_R_SLEEP);
     //SyncDriver controller(stepper, stepper2);
     MultiDriver controller(stepper, stepper2);
 }

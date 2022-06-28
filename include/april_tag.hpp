@@ -10,6 +10,7 @@ struct AprilTag
     double p[4][2];
     double H[9];
     void print();
+    double size();
 };
 
 bool testApril(AsyncUDPPacket packet);
