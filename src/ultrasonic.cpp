@@ -2,12 +2,12 @@
 #include "defines.hpp"
 #include "ultrasonic.hpp"
 
-//stores measured distances form ultrasonic sensors for use by other tasks
+// stores measured distances form ultrasonic sensors for use by other tasks
 double usDistances[3] = {0};
 
 /**
  * @brief private area
- * 
+ *
  */
 namespace
 {
@@ -86,7 +86,8 @@ namespace
      */
     double microsToCm(unsigned long t)
     {
-        return t / 58.0;
+        double r = t / 58.0;
+        return (r > US_MAX_DIST) ? 0 : r;
     }
 
     /**
@@ -104,12 +105,6 @@ namespace
     }
 }
 
-/**
- * @brief background task for ultrasonic sensors.
- * updates sensor values in the background
- *
- * @param argument
- */
 void ultrasonicTask(void *argument)
 {
     Serial.print("ultrasonicTask is running on: ");

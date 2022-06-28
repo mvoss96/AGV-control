@@ -41,6 +41,9 @@
 #define DEBUG_USE_SERIAL 1
 #define DEBUG_USE_TELNET 1
 
+/*!ultrasonic settings */
+#define US_MAX_DIST     200
+
 /*!
  * helpers
  */

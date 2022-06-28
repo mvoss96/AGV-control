@@ -23,13 +23,13 @@ void setup()
   stepperMotorsInit();
 
   // start up AP
-  //wifiSetup();
+  wifiSetup();
 
   // attachInterrupt(PIN_US0_ECHO, pulse0Echo, CHANGE);
   // setup backround tasks;
   xTaskCreatePinnedToCore(ultrasonicTask, "ultrasonicTask", 10000, NULL, 1, NULL, 1);
-  // xTaskCreatePinnedToCore(steppersControlTask, "steppersControlTask", 10000, NULL, 1, NULL, 1);
-  // xTaskCreatePinnedToCore(controlCarTask, "controlCarTask", 10000, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(steppersControlTask, "steppersControlTask", 10000, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(controlCarTask, "controlCarTask", 10000, NULL, 1, NULL, 1);
 }
 
 void loop()
