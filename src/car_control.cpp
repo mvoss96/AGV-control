@@ -50,8 +50,8 @@ void reposition()
 {
     DEBUG_MSG("start reposition");
     delay(1000);
-    int REPOSITION_TIMEOUT = 10000;
-    int TURN_MIN_TIME = 2000;
+    const unsigned REPOSITION_TIMEOUT = 10000;
+    const unsigned TURN_MIN_TIME = 2000;
     unsigned long repositionTimer = millis();
     unsigned long turnTimer = millis();
     int drivingMode = STRAIGHT;
@@ -116,6 +116,7 @@ void searchForTag(bool dir = true)
     DEBUG_MSG("start searching");
     unsigned long searchStartTime = millis();
     bool backingOff = false;
+
     while (1)
     {
         if (millis() - searchStartTime > TAG_SEARCH_TIMEOUT)
@@ -188,14 +189,21 @@ void searchForTag(bool dir = true)
 
 void followTag()
 {
+    const unsigned MIN_DRIVE_TIME = 2000;
+    const unsigned MIN_TURN_TIME = 2000;
+    static unsigned long driveTimer = millis();
+    static unsigned long turnTimer = millis();
+
     if (detectTagCenter == 0 || udpConnection == false ||
         telnetConnection == false || missionMode == missions::NO_MISSION)
     {
+        DEBUG_MSG("stop search");
+        stepperStop();
         return;
     }
-    DEBUG_SER_VAR(detectTagCenter);
+    // DEBUG_SER_VAR(detectTagCenter);
 
-    if (innerLock)
+    if (innerLock) // inner lock
     {
         if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE ||
             detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE)
@@ -207,36 +215,119 @@ void followTag()
         {
             if (detectTagSize < TAG_CLOSE_SIZE)
             {
-                DEBUG_MSG("drive straight");
-                followMode = movement_state::STRAIGHT;
-                stepperStartStraight(STEPPER_MAX_RPM);
+                if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+                {
+                    DEBUG_MSG("drive straight");
+                    followMode = movement_state::STRAIGHT;
+                    stepperStartStraight(STEPPER_MAX_RPM);
+                }
+                else
+                {
+                    while (1)
+                    {
+                        vTaskDelay(0);
+                    }
+                }
             }
-            else
+            else // close to tag
             {
                 DEBUG_MSG("Beacon reached");
                 stepperStop();
-                vTaskDelay(100);
+                while (1)
+                {
+                    vTaskDelay(0);
+                }
             }
         }
     }
-    else
+    else // outer lock
     {
         if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE_SMALL)
         {
-            if (followMode != movement_state::RIGHT || !stepperIsRunning())
+            if (usDistances[SENSOR_RIGHT] > US_MIN_TRIGGER)
             {
-                DEBUG_MSG(" turn right");
-                followMode = movement_state::RIGHT;
-                stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
+                if ((millis() > driveTimer && millis() > turnTimer &&
+                     followMode != movement_state::RIGHT) ||
+                    !stepperIsRunning())
+                {
+                    DEBUG_MSG(" turn right");
+                    followMode = movement_state::RIGHT;
+                    stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
+                }
+            }
+            else if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+            {
+                if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
+                {
+                    DEBUG_MSG("cant turn right -> drive straight");
+                    driveTimer = millis() + MIN_DRIVE_TIME;
+                    followMode = movement_state::STRAIGHT;
+                    stepperStartStraight(STEPPER_MAX_RPM);
+                }
+            }
+            else if (usDistances[SENSOR_LEFT] > US_NEAR_TRIGGER)
+            {
+                if (followMode != movement_state::LEFT || !stepperIsRunning())
+                {
+                    DEBUG_MSG("cant turn right or go straight -> turn left");
+                    turnTimer = millis() + MIN_TURN_TIME;
+                    followMode = movement_state::LEFT;
+                    stepperStartTurnLeft(STEPPER_TURN_RPM);
+                }
+            }
+            else
+            {
+                if (followMode != movement_state::BACKWARDS || !stepperIsRunning())
+                {
+                    DEBUG_MSG("cant turn  go straight -> go backwards");
+                    turnTimer = millis() + MIN_TURN_TIME;
+                    followMode = movement_state::BACKWARDS;
+                    stepperStartBackwards(STEPPER_MAX_RPM);
+                }
             }
         }
         else if (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE_SMALL)
         {
-            if (followMode != movement_state::LEFT || !stepperIsRunning())
+            if (usDistances[SENSOR_LEFT] > US_MIN_TRIGGER)
             {
-                DEBUG_MSG(" turn left");
-                followMode = movement_state::LEFT;
-                stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
+                if ((millis() > driveTimer && millis() > turnTimer &&
+                     followMode != movement_state::LEFT) ||
+                    !stepperIsRunning())
+                {
+                    DEBUG_MSG(" turn left");
+                    followMode = movement_state::LEFT;
+                    stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
+                }
+            }
+            else if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+            {
+                if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
+                {
+                    DEBUG_MSG("cant turn left -> drive straight");
+                    driveTimer = millis() + MIN_DRIVE_TIME;
+                    followMode = movement_state::STRAIGHT;
+                    stepperStartStraight(STEPPER_MAX_RPM);
+                }
+            }
+            else if (usDistances[SENSOR_RIGHT] > US_NEAR_TRIGGER)
+            {
+                if (followMode != movement_state::RIGHT || !stepperIsRunning())
+                {
+                    DEBUG_MSG("cant turn left or go straight -> turn right");
+                    turnTimer = millis() + MIN_TURN_TIME;
+                    followMode = movement_state::RIGHT;
+                    stepperStartTurnRight(STEPPER_TURN_RPM);
+                }
+            }
+            else
+            {
+                if (followMode != movement_state::BACKWARDS || !stepperIsRunning())
+                {
+                    DEBUG_MSG("cant turn  go straight -> go backwards");
+                    turnTimer = millis() + MIN_TURN_TIME;
+                    followMode = movement_state::BACKWARDS;
+                    stepperStartBackwards(STEPPER_MAX_RPM);
+                }
             }
         }
         else
@@ -289,6 +380,7 @@ void controlCarTask(void *argument)
         {
             stepperStop();
             searchForTag();
+            tagTimeoutTimer = millis();
         }
         else if (detectTagCenter > 0)
         {
