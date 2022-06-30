@@ -22,6 +22,7 @@
 #define TAG_CENTER_DEADZONE_SMALL 50
 #define TAG_CENTER_DEADZONE 100
 #define TAG_CLOSE_SIZE 400
+#define TAG_SEARCH_TIMEOUT  20000
 
 /*wifi Configuration Settings */
 #define WIFI_SSID "AGV1"
@@ -34,6 +35,7 @@
 #define STEPER_STEPS_PER_ROT 2048
 #define WHEEL_ROTS_360 2.75
 #define STEPPER_MAX_RPM 20
+#define STEPPER_TURN_RPM 5
 #define STEPPER_SLOW_TURN_RPM 3
 
 /*!telnet setings */
@@ -42,7 +44,9 @@
 #define DEBUG_USE_TELNET 1
 
 /*!ultrasonic settings */
-#define US_MAX_DIST     200
+#define US_MAX_DIST 200
+#define US_MIN_TRIGGER 7
+#define US_NEAR_TRIGGER 15
 
 /*!
  * helpers

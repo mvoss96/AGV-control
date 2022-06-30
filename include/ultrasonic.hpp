@@ -7,3 +7,12 @@
  * @param argument
  */
 void ultrasonicTask(void *argument);
+
+void ultrasonicPrint();
+
+enum US_Sensors
+{
+    SENSOR_LEFT,
+    SENSOR_FRONT,
+    SENSOR_RIGHT
+};

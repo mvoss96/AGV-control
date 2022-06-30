@@ -4,12 +4,15 @@
 #include "stepper_motor.hpp"
 #include "april_tag.hpp"
 #include "telnet_debug.hpp"
+#include "ultrasonic.hpp"
 
 extern unsigned int detectTagCenter;
 extern unsigned int detectTagSize;
 extern bool udpConnection;
 extern bool telnetConnection;
 extern uint8_t missionMode;
+extern bool ultrasonicEnable;
+extern double usDistances[3];
 
 namespace
 {
@@ -26,7 +29,8 @@ enum movement_state
     LEFT,
     STRAIGHT,
     STRAIGHT_RIGHT,
-    STRAIGHT_LEFT
+    STRAIGHT_LEFT,
+    BACKWARDS
 };
 
 void askForMission()
@@ -42,29 +46,141 @@ void askForMission()
         vTaskDelay(0);
 }
 
-void searchForTag()
+void reposition()
 {
-    DEBUG_MSG("start searching for Tag");
+    DEBUG_MSG("start reposition");
+    delay(1000);
+    int REPOSITION_TIMEOUT = 10000;
+    int TURN_MIN_TIME = 2000;
+    unsigned long repositionTimer = millis();
+    unsigned long turnTimer = millis();
+    int drivingMode = STRAIGHT;
+
     while (1)
     {
+        if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+        {
+            if (millis() - repositionTimer > REPOSITION_TIMEOUT)
+            {
+                break;
+            }
+            if ((millis() - turnTimer > TURN_MIN_TIME && drivingMode != STRAIGHT) || !stepperIsRunning())
+            {
+                DEBUG_MSG("reposition: drive straight");
+                turnTimer = millis();
+                drivingMode = STRAIGHT;
+                stepperStartStraight(STEPPER_MAX_RPM);
+            }
+        }
+        else
+        {
+            if (usDistances[SENSOR_LEFT] < US_MIN_TRIGGER && usDistances[SENSOR_RIGHT] < US_MIN_TRIGGER)
+            {
+                if (drivingMode != BACKWARDS || !stepperIsRunning())
+                {
+                    DEBUG_MSG("reposition: drive backwards");
+                    turnTimer = millis();
+                    drivingMode = BACKWARDS;
+                    stepperStartBackwards(STEPPER_MAX_RPM);
+                }
+            }
+            else if (usDistances[SENSOR_LEFT] > US_MIN_TRIGGER)
+            {
+                if (drivingMode != LEFT || !stepperIsRunning())
+                {
+                    DEBUG_MSG("reposition: turn left");
+                    turnTimer = millis();
+                    drivingMode = LEFT;
+                    stepperStartTurnLeft(STEPPER_TURN_RPM);
+                }
+            }
+            else if (usDistances[SENSOR_RIGHT] > US_MIN_TRIGGER)
+            {
+                if (drivingMode != RIGHT || !stepperIsRunning())
+                {
+                    DEBUG_MSG("reposition: turn right");
+                    turnTimer = millis();
+                    drivingMode = RIGHT;
+                    stepperStartTurnRight(STEPPER_TURN_RPM);
+                }
+            }
+        }
+        vTaskDelay(0);
+    }
+    stepperStop();
+    DEBUG_MSG(" reposition complete");
+}
+
+void searchForTag(bool dir = true)
+{
+    DEBUG_MSG("start searching");
+    unsigned long searchStartTime = millis();
+    bool backingOff = false;
+    while (1)
+    {
+        if (millis() - searchStartTime > TAG_SEARCH_TIMEOUT)
+        {
+            DEBUG_MSG("tag search timeout");
+            stepperStop();
+            reposition();
+            searchStartTime = millis();
+        }
         if (udpConnection == false || telnetConnection == false ||
             missionMode == missions::NO_MISSION)
         {
+            DEBUG_MSG("stop search due to connection error");
             stepperStop();
             return;
         }
-        // wait for detectTag signal
+        // if tag detected
         if (detectTagCenter != 0)
         {
             DEBUG_MSG("tag in view");
             tagLock = true;
             return;
         }
-        // make sure robot is turning
-        if (stepperIsRunning() == false)
+
+        // check ultrasonic sensors
+        if (usDistances[SENSOR_FRONT] < US_MIN_TRIGGER)
         {
-            DEBUG_MSG("start turning");
-            stepperStartTurnLeft(5);
+            if (!stepperIsRunning() || backingOff == false)
+            {
+                DEBUG_MSG("obstacle in front: drive backwards");
+                backingOff = true;
+                stepperStartBackwards(STEPPER_MAX_RPM);
+                vTaskDelay(100);
+            }
+        }
+        else if (usDistances[SENSOR_LEFT] < US_MIN_TRIGGER && usDistances[SENSOR_RIGHT] < US_MIN_TRIGGER)
+        {
+            DEBUG_MSG("obstacle on both sides while turning");
+            stepperStop();
+            reposition();
+        }
+        else
+        {
+            if (usDistances[(dir) ? SENSOR_LEFT : SENSOR_RIGHT] < US_MIN_TRIGGER)
+            {
+                DEBUG_MSG("obstacle while turning: changing direction");
+                stepperStop();
+                dir = !dir;
+            }
+
+            // make sure robot is turning
+            if (stepperIsRunning() == false || backingOff == true)
+            {
+                backingOff = false;
+                if (dir)
+                {
+                    DEBUG_MSG("start turning left");
+                    stepperStartTurnLeft(STEPPER_TURN_RPM);
+                }
+                else
+                {
+                    DEBUG_MSG("start turning right");
+                    stepperStartTurnRight(STEPPER_TURN_RPM);
+                }
+            }
         }
         vTaskDelay(0);
     }

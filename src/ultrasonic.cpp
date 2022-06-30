@@ -5,6 +5,9 @@
 // stores measured distances form ultrasonic sensors for use by other tasks
 double usDistances[3] = {0};
 
+// used to enable/disable the ultrasonic routine
+bool ultrasonicEnable = true;
+
 /**
  * @brief private area
  *
@@ -68,6 +71,7 @@ namespace
      */
     void ultrasonicInit()
     {
+        ultrasonicEnable = true;
         for (size_t i = 0; i < 3; i++)
         {
             pinMode(triggerPins[i], OUTPUT);
@@ -87,7 +91,7 @@ namespace
     double microsToCm(unsigned long t)
     {
         double r = t / 58.0;
-        return (r > US_MAX_DIST) ? 0 : r;
+        return (r > US_MAX_DIST) ? US_MAX_DIST : r;
     }
 
     /**
@@ -105,6 +109,15 @@ namespace
     }
 }
 
+
+void ultrasonicPrint(){
+    for (size_t i = 0; i < 3; i++)
+    {
+       Serial.printf("%d: %f ", i, usDistances[i]);
+    }
+    Serial.println();
+}
+
 void ultrasonicTask(void *argument)
 {
     Serial.print("ultrasonicTask is running on: ");
@@ -112,6 +125,10 @@ void ultrasonicTask(void *argument)
     ultrasonicInit();
     for (;;)
     {
+        while (ultrasonicEnable == false)
+        {
+            vTaskDelay(100);
+        }
         for (size_t i = 0; i < 3; i++)
         {
             ultrasonicPulse(i);
@@ -121,10 +138,9 @@ void ultrasonicTask(void *argument)
             }
             timerPulseFinished[i] = false;
             usDistances[i] = microsToCm(timerPulseDuration[i]);
-            Serial.printf("%d: %f ", i, usDistances[i]);
         }
-        Serial.println();
-        delay(1000);
+        ultrasonicPrint(); 
+        delay(500);
     }
     Serial.println("ultrasonicTask closed");
     vTaskDelete(NULL);
