@@ -12,7 +12,8 @@ extern bool udpConnection;
 extern bool telnetConnection;
 extern uint8_t missionMode;
 extern bool ultrasonicEnable;
-extern double usDistances[3];
+extern bool ultrasonicStarted;
+extern double usDistances[NUM_SENSORS];
 
 namespace
 {
@@ -33,6 +34,41 @@ enum movement_state
     BACKWARDS
 };
 
+double sensor_front()
+{
+    return usDistances[SENSOR_FRONTC];
+}
+
+double sensor_front_all()
+{
+    return min(usDistances[SENSOR_FRONTL], min(usDistances[SENSOR_FRONTC], usDistances[SENSOR_FRONTR]));
+}
+
+double sensor_front_out()
+{
+    return min(usDistances[SENSOR_FRONTL], usDistances[SENSOR_FRONTR]);
+}
+
+double sensor_left()
+{
+    return usDistances[SENSOR_LEFT];
+}
+
+double sensor_left_all()
+{
+    return min(usDistances[SENSOR_LEFT], usDistances[SENSOR_FRONTL]);
+}
+
+double sensor_right()
+{
+    return usDistances[SENSOR_RIGHT];
+}
+
+double sensor_right_all()
+{
+    return min(usDistances[SENSOR_RIGHT], usDistances[SENSOR_FRONTR]);
+}
+
 void askForMission()
 {
     missionMode = missions::NO_MISSION;
@@ -49,60 +85,55 @@ void askForMission()
 void reposition()
 {
     DEBUG_MSG("start reposition");
-    delay(1000);
-    const unsigned REPOSITION_TIMEOUT = 10000;
-    const unsigned TURN_MIN_TIME = 2000;
-    unsigned long repositionTimer = millis();
-    unsigned long turnTimer = millis();
-    int drivingMode = STRAIGHT;
+    int lastMove = STRAIGHT;
 
-    while (1)
+    for (;;)
     {
-        if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+        // check if you can go straight
+        if (sensor_front() > US_NEAR_TRIGGER && sensor_front_out() > US_MIN_TRIGGER && lastMove != BACKWARDS)
         {
-            if (millis() - repositionTimer > REPOSITION_TIMEOUT)
+            lastMove = STRAIGHT;
+            stepperStartStraight(STEPPER_MAX_RPM);
+        }
+        // check if you can go left instead
+        else if (sensor_left_all() > US_NEAR_TRIGGER && lastMove != RIGHT)
+        {
+            Serial.println("left");
+            lastMove = LEFT;
+            stepperStartTurnLeft(STEPPER_TURN_RPM);
+            while (returnSteps() < STEPS_90)
             {
-                break;
-            }
-            if ((millis() - turnTimer > TURN_MIN_TIME && drivingMode != STRAIGHT) || !stepperIsRunning())
-            {
-                DEBUG_MSG("reposition: drive straight");
-                turnTimer = millis();
-                drivingMode = STRAIGHT;
-                stepperStartStraight(STEPPER_MAX_RPM);
+                if (sensor_left_all() < US_MIN_TRIGGER)
+                {
+                    break;
+                }
+                vTaskDelay(0);
             }
         }
+        // check if you can go right instead
+        else if (sensor_right_all() > US_NEAR_TRIGGER && lastMove != LEFT)
+        {
+            Serial.println("right");
+            lastMove = RIGHT;
+            stepperStartTurnRight(STEPPER_TURN_RPM);
+            while (returnSteps() < STEPS_90)
+            {
+                if (sensor_right_all() < US_MIN_TRIGGER)
+                {
+                    break;
+                }
+                vTaskDelay(0);
+            }
+        }
+        // must back off
         else
         {
-            if (usDistances[SENSOR_LEFT] < US_MIN_TRIGGER && usDistances[SENSOR_RIGHT] < US_MIN_TRIGGER)
+            Serial.println("back");
+            lastMove = BACKWARDS;
+            stepperStartBackwards(STEPPER_MAX_RPM);
+            while (returnSteps() < STEPER_STEPS_PER_ROT * 2)
             {
-                if (drivingMode != BACKWARDS || !stepperIsRunning())
-                {
-                    DEBUG_MSG("reposition: drive backwards");
-                    turnTimer = millis();
-                    drivingMode = BACKWARDS;
-                    stepperStartBackwards(STEPPER_MAX_RPM);
-                }
-            }
-            else if (usDistances[SENSOR_LEFT] > US_MIN_TRIGGER)
-            {
-                if (drivingMode != LEFT || !stepperIsRunning())
-                {
-                    DEBUG_MSG("reposition: turn left");
-                    turnTimer = millis();
-                    drivingMode = LEFT;
-                    stepperStartTurnLeft(STEPPER_TURN_RPM);
-                }
-            }
-            else if (usDistances[SENSOR_RIGHT] > US_MIN_TRIGGER)
-            {
-                if (drivingMode != RIGHT || !stepperIsRunning())
-                {
-                    DEBUG_MSG("reposition: turn right");
-                    turnTimer = millis();
-                    drivingMode = RIGHT;
-                    stepperStartTurnRight(STEPPER_TURN_RPM);
-                }
+                vTaskDelay(0);
             }
         }
         vTaskDelay(0);
@@ -142,7 +173,7 @@ void searchForTag(bool dir = true)
         }
 
         // check ultrasonic sensors
-        if (usDistances[SENSOR_FRONT] < US_MIN_TRIGGER)
+        if (sensor_front() < US_MIN_TRIGGER)
         {
             if (!stepperIsRunning() || backingOff == false)
             {
@@ -215,7 +246,7 @@ void followTag()
         {
             if (detectTagSize < TAG_CLOSE_SIZE)
             {
-                if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+                if (sensor_front() > US_NEAR_TRIGGER)
                 {
                     DEBUG_MSG("drive straight");
                     followMode = movement_state::STRAIGHT;
@@ -255,7 +286,7 @@ void followTag()
                     stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
                 }
             }
-            else if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+            else if (sensor_front() > US_NEAR_TRIGGER)
             {
                 if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
                 {
@@ -299,7 +330,7 @@ void followTag()
                     stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
                 }
             }
-            else if (usDistances[SENSOR_FRONT] > US_NEAR_TRIGGER)
+            else if (sensor_front() > US_NEAR_TRIGGER)
             {
                 if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
                 {
@@ -356,42 +387,50 @@ void controlCarTask(void *argument)
 {
     Serial.print("carControlTask is running on: ");
     Serial.println(xPortGetCoreID());
-    // wait for connection
+    
     for (;;)
     {
-        if (udpConnection == false)
-        {
-            tagLock = false;
-            stepperStop();
-            waitForUDP();
+        // wait for ultrasonic
+        while (ultrasonicStarted == false){
+            DEBUG_MSG("waiting for us sensors...");
+            delay(1000);
         }
-        else if (telnetConnection == false)
-        {
-            tagLock = false;
-            stepperStop();
-            waitForTelnet();
-        }
-        else if (missionMode == missions::NO_MISSION)
-        {
-            stepperStop();
-            askForMission();
-        }
-        else if (tagLock == false)
-        {
-            stepperStop();
-            searchForTag();
-            tagTimeoutTimer = millis();
-        }
-        else if (detectTagCenter > 0)
-        {
-            tagTimeoutTimer = millis();
-            followTag();
-        }
-        else if (millis() - tagTimeoutTimer > 1000)
-        {
-            DEBUG_MSG("tagTimeout: tag lock lost");
-            tagLock = false;
-        }
+        delay(1000);
+        reposition();
+
+        // if (udpConnection == false)
+        // {
+        //     tagLock = false;
+        //     stepperStop();
+        //     waitForUDP();
+        // }
+        // else if (telnetConnection == false)
+        // {
+        //     tagLock = false;
+        //     stepperStop();
+        //     waitForTelnet();
+        // }
+        // else if (missionMode == missions::NO_MISSION)
+        // {
+        //     stepperStop();
+        //     askForMission();
+        // }
+        // else if (tagLock == false)
+        // {
+        //     stepperStop();
+        //     searchForTag();
+        //     tagTimeoutTimer = millis();
+        // }
+        // else if (detectTagCenter > 0)
+        // {
+        //     tagTimeoutTimer = millis();
+        //     followTag();
+        // }
+        // else if (millis() - tagTimeoutTimer > 1000)
+        // {
+        //     DEBUG_MSG("tagTimeout: tag lock lost");
+        //     tagLock = false;
+        // }
         vTaskDelay(0);
     }
     Serial.println("carControlTask closed");

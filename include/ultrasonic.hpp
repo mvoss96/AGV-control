@@ -13,6 +13,8 @@ void ultrasonicPrint();
 enum US_Sensors
 {
     SENSOR_LEFT,
-    SENSOR_FRONT,
+    SENSOR_FRONTL,
+    SENSOR_FRONTC,
+    SENSOR_FRONTR,
     SENSOR_RIGHT
 };

@@ -8,21 +8,25 @@
 #define PIN_STEPPER_R_STEP 33
 #define PIN_STEPPER_R_DIR 32
 #define PIN_STEPPER_R_SLEEP 27
-#define PIN_US0_TRIGGER 22
-#define PIN_US0_ECHO 18
-#define PIN_US1_TRIGGER 19
-#define PIN_US1_ECHO 5
-#define PIN_US2_TRIGGER 23
-#define PIN_US2_ECHO 17
-#define PIN_ENC_A 35
-#define PIN_ENC_B 34
+
+#define PIN_US0_TRIGGER 4
+#define PIN_US0_ECHO 34
+#define PIN_US1_TRIGGER 22
+#define PIN_US1_ECHO 18
+#define PIN_US2_TRIGGER 19
+#define PIN_US2_ECHO 5
+#define PIN_US3_TRIGGER 23
+#define PIN_US3_ECHO 17
+#define PIN_US4_TRIGGER 16
+#define PIN_US4_ECHO 35
+#define NUM_SENSORS 5
 
 /*!Tag Configuration Settings */
 #define TAG_CENTER 600
 #define TAG_CENTER_DEADZONE_SMALL 50
 #define TAG_CENTER_DEADZONE 100
 #define TAG_CLOSE_SIZE 400
-#define TAG_SEARCH_TIMEOUT  20000
+#define TAG_SEARCH_TIMEOUT 20000
 
 /*wifi Configuration Settings */
 #define WIFI_SSID "AGV1"
@@ -34,6 +38,8 @@
 /*!Stepper Motor Configuration Settings */
 #define STEPER_STEPS_PER_ROT 2048
 #define WHEEL_ROTS_360 2.75
+#define STEPS_360 STEPER_STEPS_PER_ROT *WHEEL_ROTS_360
+#define STEPS_90 STEPS_360 * 0.25
 #define STEPPER_MAX_RPM 20
 #define STEPPER_TURN_RPM 5
 #define STEPPER_SLOW_TURN_RPM 3
@@ -46,7 +52,7 @@
 /*!ultrasonic settings */
 #define US_MAX_DIST 200
 #define US_MIN_TRIGGER 7
-#define US_NEAR_TRIGGER 15
+#define US_NEAR_TRIGGER 20
 
 /*!
  * helpers

@@ -8,8 +8,17 @@ namespace
 {
     BasicStepperDriver stepper(STEPER_STEPS_PER_ROT, PIN_STEPPER_L_DIR, PIN_STEPPER_L_STEP, PIN_STEPPER_L_SLEEP);
     BasicStepperDriver stepper2(STEPER_STEPS_PER_ROT, PIN_STEPPER_R_DIR, PIN_STEPPER_R_STEP, PIN_STEPPER_R_SLEEP);
-    //SyncDriver controller(stepper, stepper2);
+    // SyncDriver controller(stepper, stepper2);
     MultiDriver controller(stepper, stepper2);
+    enum movement_state
+    {
+        STOPPED,
+        RIGHT,
+        LEFT,
+        STRAIGHT,
+        BACKWARDS
+    };
+    unsigned state;
 }
 
 void steppersControlTask(void *argument)
@@ -43,42 +52,51 @@ void stepperMotorsInit()
 
 void stepperStartTurnLeft(unsigned int rpm)
 {
-    controller.enable();
-    controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
-    controller.startMove(STEPER_STEPS_PER_ROT * WHEEL_ROTS_360, STEPER_STEPS_PER_ROT * WHEEL_ROTS_360);
+    if (state != LEFT)
+    {
+        state = LEFT;
+        controller.enable();
+        controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
+        controller.startMove(STEPER_STEPS_PER_ROT * WHEEL_ROTS_360, STEPER_STEPS_PER_ROT * WHEEL_ROTS_360);
+    }
 }
 
 void stepperStartTurnRight(unsigned int rpm)
 {
-    controller.enable();
-    controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
-    controller.startMove(-STEPER_STEPS_PER_ROT * WHEEL_ROTS_360, -STEPER_STEPS_PER_ROT * WHEEL_ROTS_360);
+    if (state != RIGHT)
+    {
+        state = RIGHT;
+        controller.enable();
+        controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
+        controller.startMove(-STEPER_STEPS_PER_ROT * WHEEL_ROTS_360, -STEPER_STEPS_PER_ROT * WHEEL_ROTS_360);
+    }
 }
 
 void stepperStartStraight(unsigned int rpm)
 {
-    controller.enable();
-    controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
-    controller.startMove(STEPER_STEPS_PER_ROT * 100, -STEPER_STEPS_PER_ROT * 100);
-}
-
-void stepperStartStraightC(unsigned int rpm1,unsigned int rpm2)
-{
-    controller.enable();
-    stepper.setRPM(rpm1);
-    stepper2.setRPM(rpm2);
-    controller.startMove(STEPER_STEPS_PER_ROT * 100, -STEPER_STEPS_PER_ROT * 100);
+    if (state != STRAIGHT)
+    {
+        state = STRAIGHT;
+        controller.enable();
+        controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
+        controller.startMove(STEPER_STEPS_PER_ROT * 100, -STEPER_STEPS_PER_ROT * 100);
+    }
 }
 
 void stepperStartBackwards(unsigned int rpm)
 {
-    controller.enable();
-    controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
-    controller.startMove(-STEPER_STEPS_PER_ROT * 100, STEPER_STEPS_PER_ROT * 100);
+    if (state != BACKWARDS)
+    {
+        state = BACKWARDS;
+        controller.enable();
+        controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
+        controller.startMove(-STEPER_STEPS_PER_ROT * 100, STEPER_STEPS_PER_ROT * 100);
+    }
 }
 
 void stepperStop()
 {
+    state = STOPPED;
     controller.stop();
     controller.disable();
 }
@@ -96,4 +114,9 @@ void setRpmStepperL(int rpm)
 void setRpmStepperR(int rpm)
 {
     stepper2.setRPM(rpm);
+}
+
+unsigned long returnSteps()
+{
+    return stepper.getStepsCompleted();
 }

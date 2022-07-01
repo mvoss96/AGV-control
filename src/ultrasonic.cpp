@@ -3,10 +3,11 @@
 #include "ultrasonic.hpp"
 
 // stores measured distances form ultrasonic sensors for use by other tasks
-double usDistances[3] = {0};
+double usDistances[NUM_SENSORS] = {0};
 
 // used to enable/disable the ultrasonic routine
 bool ultrasonicEnable = true;
+bool ultrasonicStarted = false;
 
 /**
  * @brief private area
@@ -14,11 +15,11 @@ bool ultrasonicEnable = true;
  */
 namespace
 {
-    volatile unsigned long timerPulseStart[3] = {0};
-    volatile unsigned long timerPulseDuration[3] = {0};
-    volatile bool timerPulseFinished[3] = {0};
-    const unsigned triggerPins[3] = {PIN_US0_TRIGGER, PIN_US1_TRIGGER, PIN_US2_TRIGGER};
-    const unsigned echoPins[3] = {PIN_US0_ECHO, PIN_US1_ECHO, PIN_US2_ECHO};
+    volatile unsigned long timerPulseStart[NUM_SENSORS] = {0};
+    volatile unsigned long timerPulseDuration[NUM_SENSORS] = {0};
+    volatile bool timerPulseFinished[NUM_SENSORS] = {0};
+    const unsigned triggerPins[NUM_SENSORS] = {PIN_US0_TRIGGER, PIN_US1_TRIGGER, PIN_US2_TRIGGER, PIN_US3_TRIGGER, PIN_US4_TRIGGER};
+    const unsigned echoPins[NUM_SENSORS] = {PIN_US0_ECHO, PIN_US1_ECHO, PIN_US2_ECHO, PIN_US3_ECHO, PIN_US4_ECHO};
 
     /**
      * @brief interrupt handler to time the upper flank of the echo signal
@@ -66,13 +67,31 @@ namespace
     }
 
     /**
+     * @brief isr handler for sensor3
+     *
+     */
+    void IRAM_ATTR isrEcho3()
+    {
+        pulseEcho(3);
+    }
+
+    /**
+     * @brief isr handler for sensor3
+     *
+     */
+    void IRAM_ATTR isrEcho4()
+    {
+        pulseEcho(4);
+    }
+
+    /**
      * @brief initialize the pinStates and attach interrupts
      *
      */
     void ultrasonicInit()
     {
         ultrasonicEnable = true;
-        for (size_t i = 0; i < 3; i++)
+        for (size_t i = 0; i < NUM_SENSORS; i++)
         {
             pinMode(triggerPins[i], OUTPUT);
             pinMode(echoPins[i], INPUT);
@@ -80,6 +99,8 @@ namespace
         attachInterrupt(echoPins[0], isrEcho0, CHANGE);
         attachInterrupt(echoPins[1], isrEcho1, CHANGE);
         attachInterrupt(echoPins[2], isrEcho2, CHANGE);
+        attachInterrupt(echoPins[3], isrEcho3, CHANGE);
+        attachInterrupt(echoPins[4], isrEcho4, CHANGE);
     }
 
     /**
@@ -109,11 +130,11 @@ namespace
     }
 }
 
-
-void ultrasonicPrint(){
-    for (size_t i = 0; i < 3; i++)
+void ultrasonicPrint()
+{
+    for (size_t i = 0; i < NUM_SENSORS; i++)
     {
-       Serial.printf("%d: %f ", i, usDistances[i]);
+        Serial.printf("%d: %f ", i, usDistances[i]);
     }
     Serial.println();
 }
@@ -129,17 +150,19 @@ void ultrasonicTask(void *argument)
         {
             vTaskDelay(100);
         }
-        for (size_t i = 0; i < 3; i++)
+        for (size_t i = 0; i < NUM_SENSORS; i++)
         {
             ultrasonicPulse(i);
             while (timerPulseFinished[i] == false)
             {
                 vTaskDelay(0);
             }
+            ultrasonicStarted = true;
+            //Serial.printf("us %i\n", i);
             timerPulseFinished[i] = false;
             usDistances[i] = microsToCm(timerPulseDuration[i]);
         }
-        ultrasonicPrint(); 
+        ultrasonicPrint();
         delay(500);
     }
     Serial.println("ultrasonicTask closed");
