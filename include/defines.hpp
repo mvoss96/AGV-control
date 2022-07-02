@@ -27,6 +27,8 @@
 #define TAG_CENTER_DEADZONE 100
 #define TAG_CLOSE_SIZE 400
 #define TAG_SEARCH_TIMEOUT 20000
+#define REPOSITION_MAX_STOPS 5
+#define REPOSITION_MAX_TIME 10000
 
 /*wifi Configuration Settings */
 #define WIFI_SSID "AGV1"

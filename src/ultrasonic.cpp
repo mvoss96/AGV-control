@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "defines.hpp"
 #include "ultrasonic.hpp"
+#include "telnet_debug.hpp"
 
 // stores measured distances form ultrasonic sensors for use by other tasks
 double usDistances[NUM_SENSORS] = {0};
@@ -152,9 +153,14 @@ void ultrasonicTask(void *argument)
         }
         for (size_t i = 0; i < NUM_SENSORS; i++)
         {
+            unsigned long usStartTime = millis();
             ultrasonicPulse(i);
             while (timerPulseFinished[i] == false)
             {
+                if (ultrasonicStarted && millis() - usStartTime > 1000){
+                    DEBUG_MSG("US TIMEOUT");
+                    delay(10);
+                }
                 vTaskDelay(0);
             }
             ultrasonicStarted = true;
@@ -162,7 +168,7 @@ void ultrasonicTask(void *argument)
             timerPulseFinished[i] = false;
             usDistances[i] = microsToCm(timerPulseDuration[i]);
         }
-        ultrasonicPrint();
+        //ultrasonicPrint();
         delay(500);
     }
     Serial.println("ultrasonicTask closed");

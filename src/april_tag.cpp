@@ -42,6 +42,14 @@ void AprilTag::print()
  */
 double AprilTag::size()
 {
+    //Serial.println("corners:");
+    for (size_t i = 0; i < 4; i++)
+    {
+        //Serial.printf("%f/%f ", p[i][0], p[1][1]);
+    }
+    //Serial.println();
+
+    //Serial.println("sides");
     double longest = 0;
     double sides[4];
     sides[0] = abs(p[0][0] - p[1][0]);
@@ -50,9 +58,13 @@ double AprilTag::size()
     sides[3] = abs(p[3][0] - p[0][0]);
     for (size_t i = 0; i < 4; i++)
     {
+        //Serial.printf("%f ", sides[i]);
         if (sides[i] > longest)
             longest = sides[i];
     }
+    //Serial.println();
+    //Serial.println(longest);
+    //Serial.print("-------\n");
     return longest;
 }
 
@@ -181,9 +193,11 @@ void parseApril(AsyncUDPPacket packet)
             }
             tagCenterTotal += aTag.c[1];
             tagSizetotal += aTag.size();
+            //Serial.printf("tagsizetotal: %f\n", tagSizetotal);
             //]aTag.print();
         }
         detectTagCenter = tagCenterTotal / numTags;
         detectTagSize = tagSizetotal / numTags;
+        //Serial.printf("detectTagSize: %f\n", detectTagSize);
     }
 }

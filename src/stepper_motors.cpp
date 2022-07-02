@@ -52,7 +52,7 @@ void stepperMotorsInit()
 
 void stepperStartTurnLeft(unsigned int rpm)
 {
-    if (state != LEFT)
+    if (state != LEFT || !controller.isRunning())
     {
         state = LEFT;
         controller.enable();
@@ -63,7 +63,7 @@ void stepperStartTurnLeft(unsigned int rpm)
 
 void stepperStartTurnRight(unsigned int rpm)
 {
-    if (state != RIGHT)
+    if (state != RIGHT || !controller.isRunning())
     {
         state = RIGHT;
         controller.enable();
@@ -74,7 +74,7 @@ void stepperStartTurnRight(unsigned int rpm)
 
 void stepperStartStraight(unsigned int rpm)
 {
-    if (state != STRAIGHT)
+    if (state != STRAIGHT || !controller.isRunning())
     {
         state = STRAIGHT;
         controller.enable();
@@ -85,7 +85,7 @@ void stepperStartStraight(unsigned int rpm)
 
 void stepperStartBackwards(unsigned int rpm)
 {
-    if (state != BACKWARDS)
+    if (state != BACKWARDS || !controller.isRunning())
     {
         state = BACKWARDS;
         controller.enable();
