@@ -9,9 +9,10 @@ namespace
     const uint8_t magic2[4] = {0x4c, 0x54, 0x41, 0x47};
     const uint8_t version[4] = {0x00, 0x01, 0x00, 0x02};
     unsigned long timeoutTimer = 0;
+    unsigned long tagLastSeen = 0;
 };
 
-unsigned int detectTagCenter = 0;
+unsigned volatile int detectTagCenter = 0;
 double detectTagSize = 0;
 int numTags = 0;
 bool udpConnection = false;
@@ -42,14 +43,14 @@ void AprilTag::print()
  */
 double AprilTag::size()
 {
-    //Serial.println("corners:");
+    // Serial.println("corners:");
     for (size_t i = 0; i < 4; i++)
     {
-        //Serial.printf("%f/%f ", p[i][0], p[1][1]);
+        // Serial.printf("%f/%f ", p[i][0], p[1][1]);
     }
-    //Serial.println();
+    // Serial.println();
 
-    //Serial.println("sides");
+    // Serial.println("sides");
     double longest = 0;
     double sides[4];
     sides[0] = abs(p[0][0] - p[1][0]);
@@ -58,13 +59,13 @@ double AprilTag::size()
     sides[3] = abs(p[3][0] - p[0][0]);
     for (size_t i = 0; i < 4; i++)
     {
-        //Serial.printf("%f ", sides[i]);
+        // Serial.printf("%f ", sides[i]);
         if (sides[i] > longest)
             longest = sides[i];
     }
-    //Serial.println();
-    //Serial.println(longest);
-    //Serial.print("-------\n");
+    // Serial.println();
+    // Serial.println(longest);
+    // Serial.print("-------\n");
     return longest;
 }
 
@@ -159,11 +160,11 @@ void parseApril(AsyncUDPPacket packet)
     }
     // Serial.println();
     numTags = buffToInteger(packet.data() + 12);
-    detectTagCenter = 0;
     double tagCenterTotal = 0;
     double tagSizetotal = 0;
     if (numTags > 0)
     {
+        tagLastSeen = millis();
         uint8_t *tagPTemp = packet.data() + 24;
         for (int i = 0; i < numTags; i++)
         {
@@ -193,11 +194,19 @@ void parseApril(AsyncUDPPacket packet)
             }
             tagCenterTotal += aTag.c[1];
             tagSizetotal += aTag.size();
-            //Serial.printf("tagsizetotal: %f\n", tagSizetotal);
+            // Serial.printf("tagsizetotal: %f\n", tagSizetotal);
             //]aTag.print();
         }
         detectTagCenter = tagCenterTotal / numTags;
         detectTagSize = tagSizetotal / numTags;
-        //Serial.printf("detectTagSize: %f\n", detectTagSize);
+        // Serial.printf("detectTagSize: %f\n", detectTagSize);
+    }
+    else
+    {
+        if (detectTagCenter != 0 && millis() - tagLastSeen > TAG_LAST_SEEN_TIMEOUT)
+        {
+            DEBUG_MSG("detectTagSeen timeout");
+            detectTagCenter = 0;
+        }
     }
 }

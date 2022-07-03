@@ -6,7 +6,7 @@
 #include "telnet_debug.hpp"
 #include "ultrasonic.hpp"
 
-extern unsigned int detectTagCenter;
+extern unsigned volatile detectTagCenter;
 extern double detectTagSize;
 extern bool udpConnection;
 extern bool telnetConnection;
@@ -17,11 +17,8 @@ extern double usDistances[NUM_SENSORS];
 
 namespace
 {
-
     bool tagLock = false;
-    unsigned long tagTimeoutTimer;
-    int followMode = 0;
-    bool innerLock = false;
+    bool innerCircle = false;
 }
 
 enum movement_state
@@ -105,7 +102,7 @@ void askForMission()
 
 void reposition()
 {
-    DEBUG_MSG("start reposition");
+    DEBUG_MSG("reposition: start");
     int lastMove = NONE;
     int repositionMoved = 0;
     unsigned long reposTimer = 0;
@@ -151,9 +148,9 @@ void reposition()
         {
             DEBUG_MSG("reposition: left");
             lastMove = LEFT;
-            stepperStartTurnLeft(STEPPER_TURN_RPM);
             while (returnSteps() < STEPS_90 / 2)
             {
+                stepperStartTurnLeft(STEPPER_TURN_RPM);
                 if (detectTagCenter != 0)
                 {
                     DEBUG_MSG("reposition: tag in view");
@@ -172,9 +169,9 @@ void reposition()
         {
             DEBUG_MSG("reposition: right");
             lastMove = RIGHT;
-            stepperStartTurnRight(STEPPER_TURN_RPM);
             while (returnSteps() < STEPS_90)
             {
+                stepperStartTurnRight(STEPPER_TURN_RPM);
                 if (detectTagCenter != 0)
                 {
                     DEBUG_MSG("reposition: tag in view");
@@ -193,9 +190,9 @@ void reposition()
         {
             DEBUG_MSG("reposition: back");
             lastMove = BACKWARDS;
-            stepperStartBackwards(STEPPER_MAX_RPM);
             while (returnSteps() < STEPER_STEPS_PER_ROT * 0.5)
             {
+                stepperStartBackwards(STEPPER_MAX_RPM);
                 if (detectTagCenter != 0)
                 {
                     DEBUG_MSG("reposition: tag in view");
@@ -217,7 +214,7 @@ void reposition()
 
 void searchForTag(bool dir = true)
 {
-    DEBUG_MSG("start searching");
+    DEBUG_MSG("search: start");
     unsigned long searchStartTime = millis();
     unsigned numChanges = 0;
     int lastMove = NONE;
@@ -250,9 +247,9 @@ void searchForTag(bool dir = true)
         else if (sensor_front_all() < US_MIN_TRIGGER)
         {
             DEBUG_MSG("search: back");
-            stepperStartBackwards(STEPPER_MAX_RPM);
             while (returnSteps() < STEPER_STEPS_PER_ROT * 0.5)
             {
+                stepperStartBackwards(STEPPER_MAX_RPM);
                 if (stopMode())
                 {
                     break;
@@ -271,9 +268,9 @@ void searchForTag(bool dir = true)
             if (dir && sensor_left_all() > US_MIN_TRIGGER)
             {
                 DEBUG_MSG("search: turn left");
-                stepperStartTurnLeft(STEPPER_TURN_RPM);
                 while (returnSteps() < STEPS_360)
                 {
+                    stepperStartTurnLeft(STEPPER_TURN_RPM);
                     if (!stepperIsRunning() || sensor_left_all() < US_MIN_TRIGGER || detectTagCenter != 0 || stopMode())
                     {
                         break;
@@ -284,9 +281,9 @@ void searchForTag(bool dir = true)
             else if (!dir && sensor_right_all() > US_MIN_TRIGGER)
             {
                 DEBUG_MSG("search: turn right");
-                stepperStartTurnRight(STEPPER_TURN_RPM);
                 while (returnSteps() < STEPS_360)
                 {
+                    stepperStartTurnRight(STEPPER_TURN_RPM);
                     if (!stepperIsRunning() || sensor_right_all() < US_MIN_TRIGGER || detectTagCenter != 0 || stopMode())
                     {
                         break;
@@ -306,154 +303,175 @@ void searchForTag(bool dir = true)
     }
 }
 
+// bool outerLock()
+// {
+//     unsigned localTagCenter = detectTagCenter;
+//     bool s = localTagCenter > TAG_CENTER - TAG_CENTER_DEADZONE &&
+//              localTagCenter < TAG_CENTER + TAG_CENTER_DEADZONE;
+//     if (s)
+//     {
+//         DEBUG_VAR(localTagCenter);
+//     }
+//     return s;
+// }
+
+bool innerLock()
+{
+    unsigned localTagCenter = detectTagCenter;
+    return (localTagCenter > TAG_CENTER - TAG_CENTER_DEADZONE_SMALL &&
+            localTagCenter < TAG_CENTER + TAG_CENTER_DEADZONE_SMALL);
+}
+
 void followTag()
 {
-    const unsigned MIN_DRIVE_TIME = 2000;
-    const unsigned MIN_TURN_TIME = 2000;
-    static unsigned long driveTimer = millis();
-    static unsigned long turnTimer = millis();
+    DEBUG_MSG("follow: start");
+    int lastMove = NONE;
+    bool lockedOn = false;
+    int intendedMove = STRAIGHT;
+    unsigned long taglastSeen = 0;
 
-    if (detectTagCenter == 0 || stopMode())
+    for (;;)
     {
-        DEBUG_MSG("stop follow");
-        stepperStop();
-        return;
-    }
-    // DEBUG_SER_VAR(detectTagCenter);
+        // check if we lost tag or connection
+        if (detectTagCenter == 0)
+        {
 
-    if (innerLock) // inner lock
-    {
-        if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE ||
-            detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE)
-        {
-            DEBUG_MSG("innerLock lost");
-            innerLock = false;
+            DEBUG_MSG("follow: stopped because tag is no longer in view");
+            tagLock = false;
+            stepperStop();
+            return;
         }
-        else if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
+
+        if (stopMode())
         {
-            DEBUG_VAR(detectTagSize);
-            if (detectTagSize < TAG_CLOSE_SIZE)
-            {
-                if (sensor_front() > US_NEAR_TRIGGER)
-                {
-                    DEBUG_MSG("drive straight");
-                    followMode = movement_state::STRAIGHT;
-                    stepperStartStraight(STEPPER_MAX_RPM);
-                }
-                else
-                {
-                    while (1)
-                    {
-                        vTaskDelay(0);
-                    }
-                }
-            }
-            else // close to tag
-            {
-                DEBUG_MSG("Beacon reached");
-                stepperStop();
-                while (1)
-                {
-                    DEBUG_VAR(detectTagSize);
-                    vTaskDelay(1000);
-                }
-            }
+            DEBUG_MSG("follow: stopped");
+            stepperStop();
+            return;
         }
-    }
-    else // outer lock
-    {
-        if (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE_SMALL)
+
+        // check if we left inner lock
+        unsigned temp = detectTagCenter;
+        if (lockedOn && (temp < TAG_CENTER - TAG_CENTER_DEADZONE ||
+                         temp > TAG_CENTER + TAG_CENTER_DEADZONE))
         {
-            if (usDistances[SENSOR_RIGHT] > US_MIN_TRIGGER)
+            DEBUG_MSG("follow: lockedOn lost");
+            DEBUG_VAR(temp);
+            stepperStop();
+            lockedOn = false;
+        }
+        // check if we entered inner lock
+        else if (!lockedOn && innerLock())
+        {
+            DEBUG_MSG("follow: lockedOn");
+            DEBUG_VAR(detectTagCenter);
+            stepperStop();
+            lockedOn = true;
+        }
+
+        // check if we are in inner circle
+        if (!innerCircle && detectTagSize > TAG_CLOSE_SIZE)
+        {
+            DEBUG_MSG("follow: we are inside inner circle");
+            innerCircle = true;
+        }
+
+        // what move to we want to do?
+        intendedMove = STRAIGHT;
+        if (!lockedOn && detectTagCenter < TAG_CENTER)
+        {
+            if (lastMove != RIGHT)
             {
-                if ((millis() > driveTimer && millis() > turnTimer &&
-                     followMode != movement_state::RIGHT) ||
-                    !stepperIsRunning())
+                DEBUG_MSG("follow: intend right");
+            }
+            intendedMove = (sensor_right_all() < US_MIN_TRIGGER) ? STRAIGHT : RIGHT;
+            if (intendedMove == RIGHT)
+            {
+                lastMove = RIGHT;
+                while (sensor_right_all() > US_MIN_TRIGGER)
                 {
-                    DEBUG_MSG(" turn right");
-                    followMode = movement_state::RIGHT;
                     stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
-                }
-            }
-            else if (sensor_front() > US_NEAR_TRIGGER)
-            {
-                if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
-                {
-                    DEBUG_MSG("cant turn right -> drive straight");
-                    driveTimer = millis() + MIN_DRIVE_TIME;
-                    followMode = movement_state::STRAIGHT;
-                    stepperStartStraight(STEPPER_MAX_RPM);
-                }
-            }
-            else if (usDistances[SENSOR_LEFT] > US_NEAR_TRIGGER)
-            {
-                if (followMode != movement_state::LEFT || !stepperIsRunning())
-                {
-                    DEBUG_MSG("cant turn right or go straight -> turn left");
-                    turnTimer = millis() + MIN_TURN_TIME;
-                    followMode = movement_state::LEFT;
-                    stepperStartTurnLeft(STEPPER_TURN_RPM);
+                    if (stopMode() || innerLock())
+                    {
+                        DEBUG_MSG("follow: stopped turning right");
+                        break;
+                    }
+                    vTaskDelay(0);
                 }
             }
             else
             {
-                if (followMode != movement_state::BACKWARDS || !stepperIsRunning())
-                {
-                    DEBUG_MSG("cant turn  go straight -> go backwards");
-                    turnTimer = millis() + MIN_TURN_TIME;
-                    followMode = movement_state::BACKWARDS;
-                    stepperStartBackwards(STEPPER_MAX_RPM);
-                }
+                DEBUG_MSG("follow: cant turn right -> intend straight");
             }
         }
-        else if (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE_SMALL)
+        else if (!lockedOn && detectTagCenter > TAG_CENTER)
         {
-            if (usDistances[SENSOR_LEFT] > US_MIN_TRIGGER)
+            if (lastMove != LEFT)
             {
-                if ((millis() > driveTimer && millis() > turnTimer &&
-                     followMode != movement_state::LEFT) ||
-                    !stepperIsRunning())
+                DEBUG_MSG("follow: intend left");
+            }
+            intendedMove = (sensor_left_all() < US_MIN_TRIGGER) ? STRAIGHT : LEFT;
+            if (intendedMove == LEFT)
+            {
+                lastMove = LEFT;
+                while (sensor_left_all() > US_MIN_TRIGGER)
                 {
-                    DEBUG_MSG(" turn left");
-                    followMode = movement_state::LEFT;
                     stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
-                }
-            }
-            else if (sensor_front() > US_NEAR_TRIGGER)
-            {
-                if (followMode != movement_state::STRAIGHT || !stepperIsRunning())
-                {
-                    DEBUG_MSG("cant turn left -> drive straight");
-                    driveTimer = millis() + MIN_DRIVE_TIME;
-                    followMode = movement_state::STRAIGHT;
-                    stepperStartStraight(STEPPER_MAX_RPM);
-                }
-            }
-            else if (usDistances[SENSOR_RIGHT] > US_NEAR_TRIGGER)
-            {
-                if (followMode != movement_state::RIGHT || !stepperIsRunning())
-                {
-                    DEBUG_MSG("cant turn left or go straight -> turn right");
-                    turnTimer = millis() + MIN_TURN_TIME;
-                    followMode = movement_state::RIGHT;
-                    stepperStartTurnRight(STEPPER_TURN_RPM);
+                    if (stopMode() || innerLock())
+                    {
+                        DEBUG_MSG("follow: stopped turning left");
+                        break;
+                    }
+                    vTaskDelay(0);
                 }
             }
             else
             {
-                if (followMode != movement_state::BACKWARDS || !stepperIsRunning())
-                {
-                    DEBUG_MSG("cant turn  go straight -> go backwards");
-                    turnTimer = millis() + MIN_TURN_TIME;
-                    followMode = movement_state::BACKWARDS;
-                    stepperStartBackwards(STEPPER_MAX_RPM);
-                }
+                DEBUG_MSG("follow: cant turn left -> intend Straight");
             }
         }
+
+        // go straight if possible
+        else if (intendedMove == STRAIGHT && sensor_front() > US_NEAR_TRIGGER &&
+                 sensor_front_out() > US_MIN_TRIGGER && sensor_left() > US_MIN_TRIGGER &&
+                 sensor_right() > US_MIN_TRIGGER)
+        {
+            if (lastMove != STRAIGHT)
+            {
+                DEBUG_MSG("follow: go straight");
+            }
+            lastMove = STRAIGHT;
+            stepperStartStraight(STEPPER_MAX_RPM);
+        }
+
+        // check if we are near station
+        else if (innerCircle && sensor_front() < US_NEAR_TRIGGER)
+        {
+            DEBUG_MSG("follow: near station!");
+            
+            while (1)
+            {
+                stepperStartStraight(STEPPER_MAX_RPM);
+                if (sensor_front_all() < US_MIN_TRIGGER)
+                {
+                    break;
+                }
+            }
+            DEBUG_MSG("follow: stopped because we reached station");
+            stepperStop();
+            for (;;)
+            {
+                delay(0);
+            }
+        }
+        // cant go straight
         else
         {
-            DEBUG_MSG("innerLock");
-            innerLock = true;
+            DEBUG_MSG("follow: cant go straight -> drive around obstacle");
+            stepperStop();
+            for (;;)
+            {
+                delay(0);
+            }
         }
     }
 }
@@ -490,9 +508,24 @@ void controlCarTask(void *argument)
 {
     Serial.print("carControlTask is running on: ");
     Serial.println(xPortGetCoreID());
+    unsigned long tagTimeoutTimer = 0;
+
+    // for (;;)
+    // {
+    //     detectTagCenter = 633;
+    //     Serial.println("-----");
+    //     Serial.printf("inner: %i\n", innerLock());
+    //     Serial.printf("outer: %i\n", outerLock());
+    //     delay(1000);
+    // }
 
     for (;;)
     {
+        if (detectTagCenter == 0)
+        {
+            tagLock = false;
+            stepperStop();
+        }
         if (telnetConnection == false)
         {
             tagLock = false;
