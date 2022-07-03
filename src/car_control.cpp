@@ -117,7 +117,7 @@ void reposition()
 
         // check if you can go straight
         if (sensor_front() > US_NEAR_TRIGGER && sensor_front_out() > US_MIN_TRIGGER &&
-            sensor_left() > US_MIN_TRIGGER && sensor_right() > US_MIN_TRIGGER && lastMove != BACKWARDS)
+            sensor_left() > 2 && sensor_right() > 2 && lastMove != BACKWARDS)
         {
             if (detectTagCenter != 0)
             {
@@ -148,6 +148,7 @@ void reposition()
         {
             DEBUG_MSG("reposition: left");
             lastMove = LEFT;
+            stepperStartTurnLeft(STEPPER_TURN_RPM);
             while (returnSteps() < STEPS_90 / 2)
             {
                 stepperStartTurnLeft(STEPPER_TURN_RPM);
@@ -169,6 +170,7 @@ void reposition()
         {
             DEBUG_MSG("reposition: right");
             lastMove = RIGHT;
+            stepperStartTurnRight(STEPPER_TURN_RPM);
             while (returnSteps() < STEPS_90)
             {
                 stepperStartTurnRight(STEPPER_TURN_RPM);
@@ -189,7 +191,10 @@ void reposition()
         else
         {
             DEBUG_MSG("reposition: back");
+            ultrasonicPrint();
             lastMove = BACKWARDS;
+            stepperStop();
+            stepperStartBackwards(STEPPER_MAX_RPM);
             while (returnSteps() < STEPER_STEPS_PER_ROT * 0.5)
             {
                 stepperStartBackwards(STEPPER_MAX_RPM);
@@ -205,6 +210,7 @@ void reposition()
                 }
                 vTaskDelay(0);
             }
+            delay(500);
         }
         vTaskDelay(0);
     }
@@ -242,11 +248,13 @@ void searchForTag(bool dir = true)
         {
             DEBUG_MSG("search: to many changes");
             reposition();
+            searchStartTime = millis();
             numChanges = 0;
         }
         else if (sensor_front_all() < US_MIN_TRIGGER)
         {
             DEBUG_MSG("search: back");
+            stepperStartBackwards(STEPPER_MAX_RPM);
             while (returnSteps() < STEPER_STEPS_PER_ROT * 0.5)
             {
                 stepperStartBackwards(STEPPER_MAX_RPM);
@@ -262,12 +270,14 @@ void searchForTag(bool dir = true)
             DEBUG_MSG("search: cant turn");
             stepperStop();
             reposition();
+            searchStartTime = millis();
         }
         else
         {
             if (dir && sensor_left_all() > US_MIN_TRIGGER)
             {
                 DEBUG_MSG("search: turn left");
+                stepperStartTurnLeft(STEPPER_TURN_RPM);
                 while (returnSteps() < STEPS_360)
                 {
                     stepperStartTurnLeft(STEPPER_TURN_RPM);
@@ -281,6 +291,7 @@ void searchForTag(bool dir = true)
             else if (!dir && sensor_right_all() > US_MIN_TRIGGER)
             {
                 DEBUG_MSG("search: turn right");
+                stepperStartTurnRight(STEPPER_TURN_RPM);
                 while (returnSteps() < STEPS_360)
                 {
                     stepperStartTurnRight(STEPPER_TURN_RPM);
@@ -426,9 +437,11 @@ void followTag()
         {
             if (lastMove != STRAIGHT)
             {
+                stepperStop();
                 DEBUG_MSG("follow: go straight");
             }
             lastMove = STRAIGHT;
+
             stepperStartStraight(STEPPER_MAX_RPM);
         }
 
@@ -446,19 +459,21 @@ void followTag()
                 stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
                 vTaskDelay(0);
             }
+            stepperStop();
+            stepperStartStraight(STEPPER_MAX_RPM);
             while (1)
             {
-                stepperStartStraight(STEPPER_MAX_RPM);
                 if (sensor_front_all() < US_BASE_TRIGGER)
                 {
                     break;
                 }
+                vTaskDelay(0);
             }
             DEBUG_MSG("follow: stopped because we reached station");
             stepperStop();
             for (;;)
             {
-                delay(0);
+                vTaskDelay(0);
             }
         }
         // cant go straight
@@ -468,9 +483,10 @@ void followTag()
             stepperStop();
             for (;;)
             {
-                delay(0);
+                vTaskDelay(0);
             }
         }
+        vTaskDelay(0);
     }
 }
 

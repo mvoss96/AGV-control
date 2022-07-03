@@ -159,7 +159,7 @@ void ultrasonicTask(void *argument)
             {
                 if (ultrasonicStarted && millis() - usStartTime > 1000){
                     DEBUG_MSG("US TIMEOUT");
-                    delay(10);
+                    delay(1000);
                 }
                 vTaskDelay(0);
             }
@@ -169,7 +169,7 @@ void ultrasonicTask(void *argument)
             usDistances[i] = microsToCm(timerPulseDuration[i]);
         }
         //ultrasonicPrint();
-        delay(500);
+        delay(250);
     }
     Serial.println("ultrasonicTask closed");
     vTaskDelete(NULL);
