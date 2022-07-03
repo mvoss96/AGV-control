@@ -303,18 +303,6 @@ void searchForTag(bool dir = true)
     }
 }
 
-// bool outerLock()
-// {
-//     unsigned localTagCenter = detectTagCenter;
-//     bool s = localTagCenter > TAG_CENTER - TAG_CENTER_DEADZONE &&
-//              localTagCenter < TAG_CENTER + TAG_CENTER_DEADZONE;
-//     if (s)
-//     {
-//         DEBUG_VAR(localTagCenter);
-//     }
-//     return s;
-// }
-
 bool innerLock()
 {
     unsigned localTagCenter = detectTagCenter;
@@ -359,6 +347,7 @@ void followTag()
             stepperStop();
             lockedOn = false;
         }
+
         // check if we entered inner lock
         else if (!lockedOn && innerLock())
         {
@@ -447,11 +436,20 @@ void followTag()
         else if (innerCircle && sensor_front() < US_NEAR_TRIGGER)
         {
             DEBUG_MSG("follow: near station!");
-            
+            while (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE_SMALL)
+            {
+                stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
+                vTaskDelay(0);
+            }
+            while (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE_SMALL)
+            {
+                stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
+                vTaskDelay(0);
+            }
             while (1)
             {
                 stepperStartStraight(STEPPER_MAX_RPM);
-                if (sensor_front_all() < US_MIN_TRIGGER)
+                if (sensor_front_all() < US_BASE_TRIGGER)
                 {
                     break;
                 }
@@ -512,11 +510,12 @@ void controlCarTask(void *argument)
 
     // for (;;)
     // {
-    //     detectTagCenter = 633;
-    //     Serial.println("-----");
-    //     Serial.printf("inner: %i\n", innerLock());
-    //     Serial.printf("outer: %i\n", outerLock());
-    //     delay(1000);
+    //     // detectTagCenter = 633;
+    //     // Serial.println("-----");
+    //     // Serial.printf("inner: %i\n", innerLock());
+    //     // Serial.printf("outer: %i\n", outerLock());
+    //     stepperStartStraight(STEPPER_TURN_RPM);
+    //     delay(0);
     // }
 
     for (;;)

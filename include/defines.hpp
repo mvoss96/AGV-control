@@ -54,7 +54,8 @@
 
 /*!ultrasonic settings */
 #define US_MAX_DIST 200
-#define US_MIN_TRIGGER 7
+#define US_MIN_TRIGGER 5
+#define US_BASE_TRIGGER 2
 #define US_NEAR_TRIGGER 20
 
 /*!
