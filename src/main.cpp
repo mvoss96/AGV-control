@@ -12,6 +12,7 @@
 const int SENSOR_MAX_RANGE = 300; // in cm
 unsigned long duration;
 unsigned int distance;
+extern bool telnetConnection;
 
 void setup()
 {
@@ -24,6 +25,12 @@ void setup()
 
   // start up AP
   wifiSetup();
+
+  while (telnetConnection == false)
+  {
+    Serial.println("wait for telnet");
+    delay(1000);
+  }
 
   // attachInterrupt(PIN_US0_ECHO, pulse0Echo, CHANGE);
   // setup backround tasks;

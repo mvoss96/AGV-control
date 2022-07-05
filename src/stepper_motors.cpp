@@ -3,6 +3,7 @@
 #include "stepper_motor.hpp"
 #include "BasicStepperDriver.h"
 #include "SyncDriver.h"
+#include "telnet_debug.hpp"
 
 namespace
 {
@@ -39,6 +40,11 @@ void steppersControlTask(void *argument)
     vTaskDelete(NULL);
 }
 
+void stepperUpdate()
+{
+    controller.nextAction();
+}
+
 void stepperMotorsInit()
 {
     Serial.println("initialize Stepper Motors");
@@ -55,6 +61,7 @@ void stepperStartTurnLeft(unsigned int rpm)
     if (state != LEFT || !controller.isRunning())
     {
         stepperStop();
+        DEBUG_MSG("motors: go left");
         state = LEFT;
         controller.enable();
         controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
@@ -67,6 +74,7 @@ void stepperStartTurnRight(unsigned int rpm)
     if (state != RIGHT || !controller.isRunning())
     {
         stepperStop();
+        DEBUG_MSG("motors: go right");
         state = RIGHT;
         controller.enable();
         controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
@@ -77,8 +85,9 @@ void stepperStartTurnRight(unsigned int rpm)
 void stepperStartStraight(unsigned int rpm)
 {
     if (state != STRAIGHT || !controller.isRunning())
-    {
+    {   
         stepperStop();
+        DEBUG_MSG("motors: go straight");
         state = STRAIGHT;
         controller.enable();
         controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
@@ -91,6 +100,7 @@ void stepperStartBackwards(unsigned int rpm)
     if (state != BACKWARDS || !controller.isRunning())
     {
         stepperStop();
+        DEBUG_MSG("motors: go back");
         state = BACKWARDS;
         controller.enable();
         controller.setRPM(rpm == 0 ? STEPPER_MAX_RPM : rpm);
@@ -100,6 +110,7 @@ void stepperStartBackwards(unsigned int rpm)
 
 void stepperStop()
 {
+    DEBUG_MSG("motors: stop called");
     state = STOPPED;
     controller.stop();
     controller.disable();

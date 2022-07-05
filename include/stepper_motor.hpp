@@ -20,4 +20,6 @@ void setRpmStepperL(int rpm);
 
 void setRpmStepperR(int rpm);
 
+void stepperUpdate();
+
 unsigned long returnSteps();
