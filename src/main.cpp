@@ -5,6 +5,7 @@
 #include "car_control.hpp"
 #include "stepper_motor.hpp"
 #include "ultrasonic.hpp"
+#include "object_recognition.hpp"
 
 #define PIN_TRIGGER 22
 #define PIN_ECHO 18
@@ -22,6 +23,11 @@ void setup()
 
   // initialize
   stepperMotorsInit();
+  if (!colorSensorInit())
+  {
+    Serial.println("colorSensorError");
+  }
+  calibrateLux();
 
   // start up AP
   wifiSetup();

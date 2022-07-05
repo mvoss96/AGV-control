@@ -24,7 +24,7 @@ enum cargo
 
 enum request
 {
-    NO_REQUEST,
+    REQUEST_NO_REQUEST,
     REQUEST_UNLOADING,
     REQUEST_LOAD_GUMMY,
     REQUEST_LOAD_COTTON,

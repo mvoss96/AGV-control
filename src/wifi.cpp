@@ -9,6 +9,9 @@
 ESPTelnet telnet;
 bool telnetConnection = false;
 uint8_t missionMode = missions::NO_MISSION;
+unsigned robotStatus = ROBOT_IDLE;
+unsigned robotCargo = CARGO_EMPTY;
+unsigned robotRequest = REQUEST_NO_REQUEST;
 
 namespace
 {
@@ -16,6 +19,7 @@ namespace
     AsyncUDP udp2;
     wifi_sta_list_t wifi_sta_list;
     tcpip_adapter_sta_list_t adapter_sta_list;
+    bool stationIsWorking = false;
 
     void onInputReceived(String input)
     {
@@ -44,6 +48,11 @@ namespace
         {
             DEBUG_MSG("set mission to GET_BALL");
             missionMode = missions::GET_BALL;
+        }
+        else if (input == "da" && missionMode != missions::NO_MISSION)
+        {
+            DEBUG_MSG("set mission to DRIVING_AWAY");
+            missionMode = missions::DRIVING_AWAY;
         }
         else
         {
@@ -117,6 +126,19 @@ namespace
         vTaskDelete(NULL);
     }
 
+    void udpCommTask(void *argument)
+    {
+        Serial.print("udpCommTask is running on: ");
+        Serial.println(xPortGetCoreID());
+
+        for (;;)
+        {
+            sendAgvPck(robotStatus, robotCargo, robotRequest);
+            delay(500);
+        }
+        Serial.println("udpCommTask closed");
+        vTaskDelete(NULL);
+    }
 
     void udpOnPck(AsyncUDPPacket packet)
     {
@@ -197,6 +219,20 @@ namespace
         {
             Serial.print("Station packet received:");
             printPacket(packet);
+            if (missionMode == missions::WAITING && robotStatus == ROBOT_STOPPED_NEAR_STATION)
+            {
+                if (packet.data()[0] == STATION_WORKING && !stationIsWorking)
+                {
+                    DEBUG_MSG("station signaled start working");
+                    stationIsWorking = true;
+                }
+                else if (packet.data()[0] == STATION_IDLE && stationIsWorking)
+                {
+                    DEBUG_MSG("station signaled finished working");
+                    stationIsWorking = false;
+                    missionMode = missions::DRIVING_AWAY;
+                }
+            }
         }
     }
 }
@@ -223,12 +259,12 @@ void sendAgvPck(uint8_t status, uint8_t cargo, uint8_t request)
         // udp.connect((ip_addr_t*)&(station.ip),UDP_COMM_PORT);
         // udp.write(msg,6);
         udp2.broadcastTo(msg, 6, 7708);
-        Serial.printf("send to %s", ip);
-        for (size_t i = 0; i < 6; i++)
-        {
-            Serial.printf(" %x", msg[i]);
-        }
-        Serial.println();
+        // Serial.printf("send to %s", ip);
+        // for (size_t i = 0; i < 6; i++)
+        // {
+        //     Serial.printf(" %x", msg[i]);
+        // }
+        // Serial.println();
     }
 }
 
@@ -260,4 +296,5 @@ void wifiSetup()
     }
     setupTelnet();
     xTaskCreatePinnedToCore(udpTimeoutTask, "udpTimeoutTask", 10000, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(udpCommTask, "udpCommTask", 10000, NULL, 1, NULL, 1);
 }

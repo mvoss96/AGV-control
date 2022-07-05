@@ -21,6 +21,10 @@
 #define PIN_US4_ECHO 35
 #define NUM_SENSORS 5
 
+#define PIN_LED_COLOR 0
+#define PIN_SCL_COLOR 15
+#define PIN_SDA_COLOR 13
+
 /*!Tag Configuration Settings */
 #define TAG_CENTER 600
 #define TAG_CENTER_DEADZONE_SMALL 50
@@ -48,6 +52,7 @@
 #define STEPPER_MAX_RPM 20
 #define STEPPER_TURN_RPM 5
 #define STEPPER_SLOW_TURN_RPM 3
+#define DRIVE_BACK_TIMEOUT 6000
 
 /*!telnet setings */
 #define DEBUG_ON 1
@@ -60,6 +65,10 @@
 #define US_BASE_TRIGGER 5
 #define US_NEAR_TRIGGER 15
 
+
+/*!colorSensor settings */
+#define NUM_CO_SAMPLES  5
+
 /*!
  * helpers
  */
@@ -70,7 +79,9 @@ enum missions
     DELIVER,
     GET_GUMMY,
     GET_COTTON,
-    GET_BALL
+    GET_BALL,
+    WAITING,
+    DRIVING_AWAY
 };
 
 #define dbg(myFixedText, variableName)                   \

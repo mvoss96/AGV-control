@@ -61,6 +61,7 @@ void stepperStartTurnLeft(unsigned int rpm)
     if (state != LEFT || !controller.isRunning())
     {
         stepperStop();
+        delay(100);
         DEBUG_MSG("motors: go left");
         state = LEFT;
         controller.enable();
@@ -74,6 +75,7 @@ void stepperStartTurnRight(unsigned int rpm)
     if (state != RIGHT || !controller.isRunning())
     {
         stepperStop();
+        delay(100);
         DEBUG_MSG("motors: go right");
         state = RIGHT;
         controller.enable();
@@ -87,6 +89,7 @@ void stepperStartStraight(unsigned int rpm)
     if (state != STRAIGHT || !controller.isRunning())
     {   
         stepperStop();
+        delay(100);
         DEBUG_MSG("motors: go straight");
         state = STRAIGHT;
         controller.enable();
@@ -100,6 +103,7 @@ void stepperStartBackwards(unsigned int rpm)
     if (state != BACKWARDS || !controller.isRunning())
     {
         stepperStop();
+        delay(100);
         DEBUG_MSG("motors: go back");
         state = BACKWARDS;
         controller.enable();
@@ -133,5 +137,5 @@ void setRpmStepperR(int rpm)
 
 unsigned long returnSteps()
 {
-    return min(stepper.getStepsCompleted(), stepper2.getStepsCompleted());
+    return max(stepper.getStepsCompleted(), stepper2.getStepsCompleted());
 }

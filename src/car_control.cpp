@@ -5,6 +5,8 @@
 #include "april_tag.hpp"
 #include "telnet_debug.hpp"
 #include "ultrasonic.hpp"
+#include "wifi.hpp"
+#include "object_recognition.hpp"
 
 extern unsigned volatile detectTagCenter;
 extern double detectTagSize;
@@ -14,6 +16,10 @@ extern uint8_t missionMode;
 extern bool ultrasonicEnable;
 extern bool ultrasonicStarted;
 extern double usDistances[NUM_SENSORS];
+
+extern unsigned robotStatus;
+extern unsigned robotCargo;
+extern unsigned robotRequest;
 
 namespace
 {
@@ -97,7 +103,7 @@ namespace
         stepperStartBackwards(STEPPER_MAX_RPM);
         while (returnSteps() < steps)
         {
-            stepperStartStraight(STEPPER_MAX_RPM);
+            stepperStartBackwards(STEPPER_MAX_RPM);
             vTaskDelay(0);
         }
     };
@@ -140,6 +146,10 @@ namespace
     void askForMission()
     {
         missionMode = missions::NO_MISSION;
+        robotStatus = ROBOT_IDLE;
+        robotCargo = CARGO_EMPTY;
+        robotRequest = REQUEST_NO_REQUEST;
+
         DEBUG_MSG("ask for mission");
         telnet.println("please choose a mission:");
         telnet.println("d-> deliver");
@@ -148,6 +158,68 @@ namespace
         telnet.println("gb -> get ping pong ball");
         while (missionMode == missions::NO_MISSION)
             vTaskDelay(0);
+
+        robotStatus = ROBOT_APPROACHING_STATION;
+        if (missionMode == missions::DELIVER)
+        {
+            bool l;
+            for (int i = 0; i < 5; i++)
+            {
+                l = objectLoaded();
+                if (l == true)
+                    break;
+                DEBUG_MSG("please load an object...");
+                delay(2000);
+            }
+            unsigned c = measureObject();
+
+            switch (c)
+            {
+            case RECOGNITION_BALL:
+                robotCargo = CARGO_BALL;
+                DEBUG_MSG("BALL loaded");
+                break;
+            case RECOGNITION_GUMMY:
+                robotCargo = CARGO_GUMMY;
+                DEBUG_MSG("GUMMY loaded");
+                break;
+            case RECOGNITION_COTTON:
+                robotCargo = CARGO_COTTON;
+                DEBUG_MSG("COTTON loaded");
+                break;
+            case RECOGNITION_ERROR:
+                DEBUG_MSG("object reconition error");
+                robotCargo = CARGO_EMPTY;
+                break;
+            }
+            delay(2000);
+        }
+        else
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                if (objectLoaded() == false)
+                    break;
+                DEBUG_MSG("make sure container is empty...");
+                delay(2000);
+            }
+            if (missionMode == missions::GET_BALL)
+            {
+                robotCargo = CARGO_EMPTY;
+                robotRequest = REQUEST_LOAD_BALL;
+            }
+            else if (missionMode == missions::GET_GUMMY)
+            {
+                robotCargo = CARGO_EMPTY;
+                robotRequest = REQUEST_LOAD_GUMMY;
+            }
+            else if (missionMode == missions::GET_COTTON)
+            {
+                robotCargo = CARGO_EMPTY;
+                robotRequest = REQUEST_LOAD_COTTON;
+            }
+            delay(2000);
+        }
     }
 
     void reposition()
@@ -314,6 +386,7 @@ namespace
                     stepperStartBackwards(STEPPER_MAX_RPM);
                     if (stopMode())
                     {
+                        DEBUG_MSG("search: back stop");
                         break;
                     }
                     vTaskDelay(10);
@@ -331,12 +404,14 @@ namespace
                 if (dir && sensor_left_all() > US_MIN_TRIGGER)
                 {
                     DEBUG_MSG("search: turn left");
+                    stepperStop();
                     stepperStartTurnLeft(STEPPER_TURN_RPM);
                     while (returnSteps() < STEPS_360)
                     {
                         stepperStartTurnLeft(STEPPER_TURN_RPM);
-                        if (!stepperIsRunning() || sensor_left_all() < US_MIN_TRIGGER || detectTagCenter != 0 || stopMode())
+                        if (sensor_left_all() < US_MIN_TRIGGER || detectTagCenter != 0 || stopMode())
                         {
+                            DEBUG_MSG("search: turn left stop");
                             break;
                         }
                         vTaskDelay(10);
@@ -350,8 +425,9 @@ namespace
                     while (returnSteps() < STEPS_360)
                     {
                         stepperStartTurnRight(STEPPER_TURN_RPM);
-                        if (!stepperIsRunning() || sensor_right_all() < US_MIN_TRIGGER || detectTagCenter != 0 || stopMode())
+                        if (sensor_right_all() < US_MIN_TRIGGER || detectTagCenter != 0 || stopMode())
                         {
+                            DEBUG_MSG("search: turn right stop");
                             break;
                         }
                         vTaskDelay(10);
@@ -378,6 +454,77 @@ namespace
 
     void followTag()
     {
+        auto avoidObstacle = []()
+        {
+            int lturns = 0;
+            int intendedMove = STRAIGHT;
+            int lastObMove = STRAIGHT;
+            while (1)
+            {
+                DEBUG_VAR(lturns);
+                if (sensor_front_all() > US_NEAR_TRIGGER &&
+                    sensor_front_out() > US_MIN_TRIGGER)
+                {
+                    DEBUG_MSG("obstacle: front is free");
+                    if (lturns == 0)
+                    {
+                        DEBUG_MSG("obstacle: turned enough");
+                        break;
+                    }
+                    else
+                    {
+                        DEBUG_MSG("obstacle: straight");
+                        stepperStartStraight(STEPPER_MAX_RPM);
+                        while (returnSteps() < STEPER_STEPS_PER_ROT * 2.0)
+                        {
+                            if (sensor_front() < US_MIN_TRIGGER || sensor_front_out() < 2)
+                            {
+                                DEBUG_MSG("obstacle: stopped straight");
+                                lastObMove = STRAIGHT;
+                                goBackSteps(STEPER_STEPS_PER_ROT * 0.1);
+                                stepperStop();
+                                break;
+                            }
+                            vTaskDelay(0);
+                        }
+
+                        while (sensor_right_all() > US_MIN_TRIGGER && lturns > 0)
+                        {
+                            DEBUG_MSG("obstacle: right back");
+                            lturns -= 1;
+                            goRightSteps(STEPS_90 * 0.5);
+                        }
+                        while (sensor_left_all() > US_MIN_TRIGGER && lturns < 0)
+                        {
+                            DEBUG_MSG("obstacle: left back");
+                            lturns += 1;
+                            goLeftSteps(STEPS_90 * 0.5);
+                        }
+                    }
+                }
+                else if (sensor_left_all() > US_MIN_TRIGGER && lastObMove != RIGHT)
+                {
+                    DEBUG_MSG("obstacle: left");
+                    lastObMove = LEFT;
+                    lturns += 1;
+                    goLeftSteps(STEPS_90 * 0.5);
+                }
+                else if (sensor_right_all() > US_MIN_TRIGGER)
+                {
+                    DEBUG_MSG("obstacle: right");
+                    lastObMove = RIGHT;
+                    lturns -= 1;
+                    goRightSteps(STEPS_90 * 0.5);
+                }
+                else
+                {
+                    DEBUG_MSG("obstacle: back");
+                    lastObMove = BACKWARDS;
+                    goBackSteps(STEPER_STEPS_PER_ROT);
+                }
+            }
+        };
+
         DEBUG_MSG("follow: start");
         int lastMove = NONE;
         bool lockedOn = false;
@@ -490,6 +637,81 @@ namespace
                 }
             }
 
+            // check if we are near station
+            else if (innerCircle && sensor_front() < 25)
+            {
+                DEBUG_MSG("follow: near station!");
+                stepperStop();
+                stepperStartStraight(15);
+                while (1)
+                {
+                    if (sensor_front_all() < US_BASE_TRIGGER)
+                    {
+                        break;
+                    }
+                    vTaskDelay(0);
+                }
+                DEBUG_MSG("follow: stopped because we reached station");
+                goStraightSteps(STEPER_STEPS_PER_ROT * 0.15);
+                stepperStop();
+                robotStatus = ROBOT_STOPPED_NEAR_STATION;
+                missionMode == missions::WAITING;
+                while (missionMode != missions::DRIVING_AWAY)
+                {
+                    vTaskDelay(10);
+                }
+                DEBUG_MSG("DriveBack: started ");
+                if (objectLoaded())
+                {
+                    int cargo = measureObject();
+                    if (cargo == CARGO_BALL)
+                    {
+                        DEBUG_MSG("new cargo: BALL");
+                    }
+                    else if (cargo == CARGO_GUMMY)
+                    {
+                        DEBUG_MSG("new cargo: GUMMY");
+                    }
+                    else if (cargo == CARGO_COTTON)
+                    {
+                        DEBUG_MSG("new cargo: COTTON");
+                    }
+                    else
+                    {
+                        DEBUG_MSG("new cargo: UNKNOWN");
+                    }
+                }
+                else
+                {
+                    DEBUG_MSG("new cargo: NONE");
+                }
+                goBackSteps(STEPER_STEPS_PER_ROT * 0.5);
+                DEBUG_MSG("DriveBack: turn around");
+                goLeftSteps(STEPS_90 * 2);
+                long startTime = millis();
+                while (true)
+                {
+                    if (millis() - startTime > DRIVE_BACK_TIMEOUT)
+                    {
+                        DEBUG_MSG("DriveBack: timeout");
+                        break;
+                    }
+                    if (sensor_front_all() < US_MIN_TRIGGER)
+                    {
+                        DEBUG_MSG("DriveBack: obstacle");
+                        break;
+                    }
+                }
+                DEBUG_MSG("DriveBack: turn around");
+                goLeftSteps(STEPS_90 * 2);
+                DEBUG_MSG("DriveBack: finished");
+                stepperStop();
+                innerCircle = false;
+                tagLock = false;
+                missionMode = NO_MISSION;
+                return;
+            }
+
             // go straight if possible
             else if (intendedMove == STRAIGHT && sensor_front() > US_NEAR_TRIGGER &&
                      sensor_front_out() > 5)
@@ -526,110 +748,12 @@ namespace
                 vTaskDelay(10);
             }
 
-            // check if we are near station
-            else if (innerCircle && sensor_front() < 25)
-            {
-                DEBUG_MSG("follow: near station!");
-                // while (detectTagCenter < TAG_CENTER - TAG_CENTER_DEADZONE_SMALL)
-                // {
-                //     stepperStartTurnRight(STEPPER_SLOW_TURN_RPM);
-                //     vTaskDelay(0);
-                // }
-                // while (detectTagCenter > TAG_CENTER + TAG_CENTER_DEADZONE_SMALL)
-                // {
-                //     stepperStartTurnLeft(STEPPER_SLOW_TURN_RPM);
-                //     vTaskDelay(0);
-                // }
-                stepperStop();
-                stepperStartStraight(15);
-                while (1)
-                {
-                    if (sensor_front_all() < US_BASE_TRIGGER)
-                    {
-                        break;
-                    }
-                    vTaskDelay(0);
-                }
-                DEBUG_MSG("follow: stopped because we reached station");
-                goStraightSteps(STEPER_STEPS_PER_ROT * 0.15);
-                stepperStop();
-                doNothingUntilStop();
-                innerCircle = false;
-                tagLock = false;
-                missionMode = NO_MISSION;
-            }
             // cant go straight
             else
             {
                 DEBUG_MSG("follow: cant go straight -> drive around obstacle");
                 stepperStop();
-                int lturns = 0;
-                int intendedMove = STRAIGHT;
-                int lastObMove = STRAIGHT;
-                while (1)
-                {
-                    DEBUG_VAR(lturns);
-                    if (sensor_front_all() > US_NEAR_TRIGGER &&
-                        sensor_front_out() > US_MIN_TRIGGER)
-                    {
-                        DEBUG_MSG("obstacle: front is free");
-                        if (lturns == 0)
-                        {
-                            DEBUG_MSG("obstacle: turned enough");
-                            break;
-                        }
-                        else
-                        {
-                            DEBUG_MSG("obstacle: straight");
-                            stepperStartStraight(STEPPER_MAX_RPM);
-                            while (returnSteps() < STEPER_STEPS_PER_ROT * 2.0)
-                            {
-                                if (sensor_front() < US_MIN_TRIGGER || sensor_front_out() < 2 )
-                                {
-                                    DEBUG_MSG("obstacle: stopped straight");
-                                    lastObMove = STRAIGHT;
-                                    goBackSteps(STEPER_STEPS_PER_ROT * 0.1);
-                                    stepperStop();
-                                    break;
-                                }
-                                vTaskDelay(0);
-                            }
-
-                            while (sensor_right_all() > US_MIN_TRIGGER && lturns > 0)
-                            {
-                                DEBUG_MSG("obstacle: right back");
-                                lturns -= 1;
-                                goRightSteps(STEPS_90 * 0.5);
-                            }
-                            while (sensor_left_all() > US_MIN_TRIGGER && lturns < 0)
-                            {
-                                DEBUG_MSG("obstacle: left back");
-                                lturns += 1;
-                                goLeftSteps(STEPS_90 * 0.5);
-                            }
-                        }
-                    }
-                    else if (sensor_left_all() > US_MIN_TRIGGER && lastObMove != RIGHT)
-                    {
-                        DEBUG_MSG("obstacle: left");
-                        lastObMove = LEFT;
-                        lturns += 1;
-                        goLeftSteps(STEPS_90 * 0.5);
-                    }
-                    else if (sensor_right_all() > US_MIN_TRIGGER)
-                    {
-                        DEBUG_MSG("obstacle: right");
-                        lastObMove = RIGHT;
-                        lturns -= 1;
-                        goRightSteps(STEPS_90 * 0.5);
-                    }
-                    else
-                    {
-                        DEBUG_MSG("obstacle: back");
-                        lastObMove = BACKWARDS;
-                        goBackSteps(STEPER_STEPS_PER_ROT);
-                    }
-                }
+                avoidObstacle();
             }
             vTaskDelay(10);
         }
@@ -669,16 +793,9 @@ void controlCarTask(void *argument)
     Serial.print("carControlTask is running on: ");
     Serial.println(xPortGetCoreID());
     unsigned long tagTimeoutTimer = 0;
-
-    // for (;;)
-    // {
-    //     // detectTagCenter = 633;
-    //     // Serial.println("-----");
-    //     // Serial.printf("inner: %i\n", innerLock());
-    //     // Serial.printf("outer: %i\n", outerLock());
-    //     stepperStartStraight(STEPPER_TURN_RPM);
-    //     delay(0);
-    // }
+    robotStatus = ROBOT_IDLE;
+    robotCargo = CARGO_EMPTY;
+    robotRequest = REQUEST_NO_REQUEST;
 
     for (;;)
     {
